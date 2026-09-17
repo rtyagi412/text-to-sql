@@ -1,0 +1,33 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  catalog-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: catalog-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: catalog
+      POSTGRES_PASSWORD: catalog
+      POSTGRES_DB: schema_catalog
+    ports:
+      - "5435:5432"
+    volumes:
+      - catalog_pg_data:/var/lib/postgresql/data
+
+volumes:
+  ollama_data:
+  catalog_pg_data:

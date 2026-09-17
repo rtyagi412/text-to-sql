@@ -1,0 +1,146 @@
+[
+  {
+    "number": "RITM0030001",
+    "name": "Database Report Request - Active Merchant Directory",
+    "variables": {
+      "output_fields": "Merchant ID, Merchant Name, Business Type, Status, Onboarded Date",
+      "report_criteria": "Merchants currently in an active status.",
+      "summary": "Sales Ops wants a weekly directory of currently active merchants for account coverage planning."
+    }
+  },
+  {
+    "number": "RITM0030002",
+    "name": "Database Report Request - Customer Contact Export",
+    "variables": {
+      "output_fields": "Customer ID, Merchant Name, Name, Email, Phone",
+      "report_criteria": "All customers, no filtering.",
+      "summary": "Support wants a monthly export of all customer contact details across 9278425352 for outreach."
+    }
+  },
+  {
+    "number": "RITM0030003",
+    "name": "Database Report Request - Failed Payments Last 7 Days",
+    "variables": {
+      "output_fields": "Payment ID, Order ID, Merchant ID, Amount, Currency, Error Code, Error Description, Failed At",
+      "report_criteria": "Payments with a status of Failed, where the payment failed within the last 7 days.",
+      "summary": "Risk Ops wants a daily SSRS report of payments that failed in the last 7 days, including gateway error details, to spot recurring failure patterns."
+    }
+  },
+  {
+    "number": "RITM0030004",
+    "name": "Database Report Request - Order Status Snapshot for Q1",
+    "variables": {
+      "output_fields": "Order ID, Merchant ID, Amount, Currency, Order Status, Created At",
+      "report_criteria": "Orders with a status of Paid or Cancelled, created between 2026-01-01 and 2026-03-31.",
+      "summary": "Finance wants a one-time Excel export of paid and cancelled orders from Q1 2026 for quarter-close reconciliation."
+    }
+  },
+  {
+    "number": "RITM0030005",
+    "name": "Database Report Request - Card Refund Reconciliation",
+    "variables": {
+      "output_fields": "Refund ID, Merchant ID, Refund Amount, Refund Status, Original Payment Method, Processed At",
+      "report_criteria": "Refunds with a status of Processed, where the original payment method was Card.",
+      "summary": "Finance wants a weekly ECG feed of processed card refunds, including the original payment method, for card-network reconciliation."
+    }
+  },
+  {
+    "number": "RITM0030006",
+    "name": "Database Report Request - High-Value Orders with Card Payments",
+    "variables": {
+      "output_fields": "Order ID, Merchant ID, Order Amount, Order Status, Payment Method, Payment Status",
+      "report_criteria": "Orders with an amount greater than 5000, where the payment method used was Card.",
+      "summary": "Finance wants a weekly SSRS report of high-value orders paid via card, to review large-ticket transaction patterns."
+    }
+  },
+  {
+    "number": "RITM0030007",
+    "name": "Database Report Request - Processed and Failed Settlements Including UPI Payments",
+    "variables": {
+      "output_fields": "Settlement ID, Merchant ID, Net Amount, Status, Bank Reference, Processed At",
+      "report_criteria": "Settlements with a status of Processed or Failed, with a net amount between 10000 and 100000, that include at least one payment made via UPI.",
+      "summary": "Reconciliation team wants a daily ECG feed of mid-to-large settlements in processed or failed status that included any UPI payment, to investigate UPI-specific settlement issues."
+    }
+  },
+  {
+    "number": "RITM0030008",
+    "name": "Database Report Request - Unreplayed Dead-Lettered Webhook Events",
+    "variables": {
+      "output_fields": "DLQ Event ID, Merchant ID, Webhook Event ID, Event Type, Final Error, Moved At",
+      "report_criteria": "Dead-lettered webhook events that have not been replayed, moved to the DLQ within the last 30 days.",
+      "summary": "Platform Engineering wants a daily SSRS report of unreplayed dead-lettered webhook events from the last 30 days to prioritize manual replay triage."
+    }
+  },
+  {
+    "number": "RITM0030009",
+    "name": "Database Report Request - Capture Failure Audit Trail",
+    "variables": {
+      "output_fields": "Transition ID, Payment ID, From Status, To Status, Event, Occurred At, Order Receipt, Merchant Name",
+      "report_criteria": "Payment state transitions with an event of Capture Fail, for orders with an amount greater than 2000, occurring in the last 90 days.",
+      "summary": "Risk team wants a weekly SSRS audit trail of capture failures on high-value orders, including order receipt and merchant identity, to investigate processor-side capture issues."
+    }
+  },
+  {
+    "number": "RITM0030010",
+    "name": "Database Report Request - Card Payment Lifecycle Trace for Refunded High-Value Orders",
+    "variables": {
+      "output_fields": "Customer ID, Customer Email, Card Token, Card Brand, Card Last Four, Order ID, Order Receipt, Payment ID, Payment Status, Refund Amount, Refund Status, Settlement ID, Settlement Status, Merchant Name",
+      "report_criteria": "Card payments on orders with an amount greater than 10000, created within the last 12 months, where the payment was fully refunded and the related settlement is in Processed status, excluding revoked card tokens.",
+      "summary": "Risk and Compliance want a monthly SSRS trace connecting high-value refunded card orders through to their settlement outcome and card-vault status, to audit the full payment lifecycle for large transactions."
+    }
+  },
+  {
+    "number": "RITM0030011",
+    "name": "Database Report Request - Live API Key Roster",
+    "variables": {
+      "output_fields": "Key ID, Merchant ID, Environment, Enabled, Last Used At, Rotated At",
+      "report_criteria": "API keys in the Live environment that are currently enabled.",
+      "summary": "Security wants a weekly report of enabled live API keys, but hasn't specified how the report should be delivered."
+    }
+  },
+  {
+    "number": "RITM0030012",
+    "name": "Database Report Request - Merchant Dashboard User Roster",
+    "variables": {
+      "output_fields": "",
+      "report_criteria": "Dashboard users belonging to merchants in an active status, with a role of Owner or Admin.",
+      "summary": "Merchant Success wants a monthly Excel export of owner/admin dashboard users at active merchants, but hasn't said which fields to include yet."
+    }
+  },
+  {
+    "number": "RITM0030013",
+    "name": "Database Report Request - Webhook Subscription Overview",
+    "variables": {
+      "output_fields": "Config ID, Merchant ID, Target URL, Enabled, Subscribed Event Types",
+      "report_criteria": "",
+      "summary": "Platform Engineering wants a monthly SSRS overview of merchant webhook subscriptions but hasn't specified which configs should be included."
+    }
+  },
+  {
+    "number": "RITM0030014",
+    "name": "Database Report Request - Stuck Outbox Events",
+    "variables": {
+      "output_fields": "Event ID, Aggregate Type, Aggregate ID, Event Type, Status, Attempts, Last Error",
+      "report_criteria": "Outbox events that have been stuck for a while and are failing repeatedly.",
+      "summary": "Platform Engineering wants an ECG feed of outbox events that seem stuck, but the exact staleness threshold and how often to refresh the report haven't been defined yet."
+    }
+  },
+  {
+    "number": "RITM0030015",
+    "name": "Database Report Request - Card Vault Compliance Snapshot",
+    "variables": {
+      "output_fields": "Card ID, Card Details, Brand, Card Holder Name",
+      "report_criteria": "Provide real-time visibility into all vault card details, refreshed only once a quarter.",
+      "summary": "Compliance wants an SSRS view of vault card data, but the requested field list is vague and the real-time expectation in the criteria conflicts with the quarterly refresh cadence."
+    }
+  },
+  {
+    "number": "RITM0030016",
+    "name": "Database Report Request - Recent Settlement Batches",
+    "variables": {
+      "output_fields": "Settlement ID, Merchant ID, Net Amount, Status, Processed At",
+      "report_criteria": "Settlements processed recently, in a Processed status.",
+      "summary": "Finance wants a daily ECG feed of recently processed settlements, delivered each day, but hasn't said what time of day it should run."
+    }
+  }
+]
