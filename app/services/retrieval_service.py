@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.schemas.catalog import TableSearchResult
-from app.services.ollama_service import embed
+from app.services.embedding_service import embed
 
 settings = get_settings()
 
@@ -66,8 +66,7 @@ def search_tables(
     keyword_weight = settings.retrieval_keyword_weight if keyword_weight is None else keyword_weight
     semantic_weight = settings.retrieval_semantic_weight if semantic_weight is None else semantic_weight
 
-    # See catalog_service.sync_catalog for why query text is lowercased before embedding.
-    query_embedding = embed(settings.embedding_model, query.lower()).embeddings[0]
+    query_embedding = embed([query], "query")[0]
 
     rows = (
         catalog_db.execute(

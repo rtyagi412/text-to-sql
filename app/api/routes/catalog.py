@@ -1,25 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.db.catalog_session import get_catalog_db
 from app.db.session import get_db
 from app.schemas.catalog import (
-    GroundedSchemaMapping,
     IntrospectionResult,
     JoinPathRequest,
     JoinPathResult,
     SearchResponse,
     SyncResult,
 )
-from app.schemas.extraction import ExtractionRequest
-from app.schemas.sql import GeneratedSql
 from app.services.catalog_service import sync_catalog
-from app.services.extraction_service import extract
-from app.services.grounding_service import ground_extraction
 from app.services.introspection_service import introspect_schema
 from app.services.join_service import resolve_join_paths
 from app.services.retrieval_service import search_tables
-from app.services.sql_service import build_sql
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -47,40 +41,6 @@ def search(
 ) -> SearchResponse:
     """Hybrid keyword + semantic search over synced tables (Phase 2 must have run at least once)."""
     return SearchResponse(query=q, results=search_tables(catalog_db, q, top_k=top_k))
-
-
-@router.post("/ground", response_model=GroundedSchemaMapping)
-def ground(
-    body: ExtractionRequest,
-    catalog_db: Session = Depends(get_catalog_db),
-) -> GroundedSchemaMapping:
-    """Extracts business entities/fields/filters from the RITM, then resolves each to a table.column."""
-    try:
-        extraction = extract(body.ritm_number, body.user_input, body.model, body.prompt_version)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if extraction is None:
-        raise HTTPException(status_code=404, detail=f"RITM '{body.ritm_number}' not found")
-    return ground_extraction(extraction, catalog_db, body.model)
-
-
-@router.post("/sql", response_model=GeneratedSql)
-def sql(
-    body: ExtractionRequest,
-    catalog_db: Session = Depends(get_catalog_db),
-) -> GeneratedSql:
-    """Extracts, grounds, and compiles the RITM into a parameterized SQL query."""
-    try:
-        extraction = extract(body.ritm_number, body.user_input, body.model, body.prompt_version)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if extraction is None:
-        raise HTTPException(status_code=404, detail=f"RITM '{body.ritm_number}' not found")
-    mapping = ground_extraction(extraction, catalog_db, body.model)
-    try:
-        return build_sql(mapping)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/joins", response_model=JoinPathResult)

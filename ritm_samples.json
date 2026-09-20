@@ -3,7 +3,7 @@
     "number": "RITM0030001",
     "name": "Database Report Request - Active Merchant Directory",
     "variables": {
-      "output_fields": "Merchant ID, Merchant Name, Business Type, Status, Onboarded Date",
+      "output_fields": "Merchant Number, Merchant Fullname, Business Type, Status, Onboarded Date",
       "report_criteria": "Merchants currently in an active status.",
       "summary": "Sales Ops wants a weekly directory of currently active merchants for account coverage planning."
     }
@@ -141,6 +141,15 @@
       "output_fields": "Settlement ID, Merchant ID, Net Amount, Status, Processed At",
       "report_criteria": "Settlements processed recently, in a Processed status.",
       "summary": "Finance wants a daily ECG feed of recently processed settlements, delivered each day, but hasn't said what time of day it should run."
+    }
+  },
+    {
+    "number": "RITM0030017",
+    "name": "Database Report Request - Order Status Snapshot for Q1",
+    "variables": {
+      "output_fields": "Order ID, Merchant ID, Amount, Notes, Attempts, Created At",
+      "report_criteria": "Orders with a status of Paid or Cancelled, created between 2026-01-01 and 2026-03-31.",
+      "summary": "Finance wants a one-time Excel export of paid and cancelled orders from Q1 2026 for quarter-close reconciliation."
     }
   }
 ]

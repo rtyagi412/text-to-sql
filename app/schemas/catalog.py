@@ -1,7 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.extraction import FilterValue, Operator, Status
-
 
 class ColumnMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -71,49 +69,6 @@ class SearchResponse(BaseModel):
     results: list[TableSearchResult] = Field(default_factory=list)
 
 
-class GroundedColumn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    schema_name: str
-    table_name: str
-    column_name: str
-    data_type: str
-    description: str | None = None
-    confidence: float
-    method: str = Field(..., description="'fuzzy' | 'fallback_search' | 'llm'")
-
-
-class GroundedEntity(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    requested_name: str
-    evidence: str
-    candidate_tables: list[TableSearchResult] = Field(default_factory=list)
-    resolved: bool
-
-
-class GroundedField(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    requested_name: str
-    evidence: str
-    column: GroundedColumn | None = None
-    alternates: list[GroundedColumn] = Field(default_factory=list)
-    resolved: bool
-
-
-class GroundedFilter(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    requested_field: str
-    operator: Operator
-    value: FilterValue = None
-    evidence: str
-    column: GroundedColumn | None = None
-    alternates: list[GroundedColumn] = Field(default_factory=list)
-    resolved: bool
-
-
 class JoinEdge(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -147,17 +102,3 @@ class JoinPathRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tables: list[str] = Field(..., min_length=1, description='"schema.table" strings, e.g. "dbo.merchant"')
-
-
-class GroundedSchemaMapping(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    ritm_number: str
-    entities: list[GroundedEntity] = Field(default_factory=list)
-    fields: list[GroundedField] = Field(default_factory=list)
-    filters: list[GroundedFilter] = Field(default_factory=list)
-    tables_used: list[str] = Field(default_factory=list)
-    unresolved_fields: list[str] = Field(default_factory=list)
-    unresolved_filters: list[str] = Field(default_factory=list)
-    join_paths: JoinPathResult
-    status: Status

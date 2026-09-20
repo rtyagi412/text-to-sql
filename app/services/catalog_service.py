@@ -7,7 +7,7 @@ from app.core.config import get_settings
 from app.models.catalog import SchemaColumn, SchemaRelationship, SchemaTable
 from app.schemas.catalog import ColumnMetadata, SyncResult, TableMetadata
 from app.services.introspection_service import introspect_schema
-from app.services.ollama_service import embed
+from app.services.embedding_service import embed
 
 settings = get_settings()
 
@@ -74,10 +74,7 @@ def sync_catalog(source_db: Session, catalog_db: Session) -> SyncResult:
     introspection = introspect_schema(source_db)
 
     doc_texts = [build_doc_text(t) for t in introspection.tables]
-    # nomic-embed-text is sensitive to casing (short, mixed-case business terms like "Merchant"
-    # embed noticeably differently than "merchant"); lowercasing both docs and queries keeps
-    # the embedding space consistent regardless of how upstream text happens to be cased.
-    embeddings = embed(settings.embedding_model, [t.lower() for t in doc_texts]).embeddings if doc_texts else []
+    embeddings = embed(doc_texts, "document")
 
     catalog_db.execute(text(_TRUNCATE))
 

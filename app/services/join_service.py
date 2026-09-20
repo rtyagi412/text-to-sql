@@ -53,17 +53,21 @@ def _load_adjacency(catalog_db: Session) -> dict[int, list[RelEdge]]:
 
 
 def _bfs_shortest_paths(
-    adjacency: dict[int, list[RelEdge]], start_id: int
+    adjacency: dict[int, list[RelEdge]], start_id: int, blocked: frozenset[int] = frozenset()
 ) -> dict[int, list[tuple[int, RelEdge]]]:
     """Standard multi-predecessor BFS: `preds[v]` holds every (u, edge) pair that reaches v
     along a shortest path from start_id, so callers can detect (and enumerate) ties instead
-    of silently picking one when several equally-short joins exist."""
+    of silently picking one when several equally-short joins exist.
+
+    A `blocked` table can be reached but is never stepped through: paths may end at it, not pass it."""
     dist: dict[int, int] = {start_id: 0}
     preds: dict[int, list[tuple[int, RelEdge]]] = {start_id: []}
     queue = deque([start_id])
 
     while queue:
         u = queue.popleft()
+        if u in blocked and u != start_id:
+            continue
         for edge in adjacency.get(u, []):
             v = edge.other_side(u)
             if v not in dist:
@@ -113,7 +117,11 @@ def _to_join_edge(edge: RelEdge, id_to_name: dict[int, tuple[str, str]]) -> Join
     )
 
 
-def resolve_join_paths(catalog_db: Session, tables_used: list[str]) -> JoinPathResult:
+def resolve_join_paths(
+    catalog_db: Session, tables_used: list[str], no_transit: list[str] | None = None
+) -> JoinPathResult:
+    """Shortest foreign-key paths from the first table in `tables_used` to each of the others.
+    `no_transit` ("schema.table" names) can end a path but never sit in the middle of one."""
     name_to_id, id_to_name = _load_table_maps(catalog_db)
     target_ids = [name_to_id[t] for t in tables_used if t in name_to_id]
 
@@ -122,7 +130,8 @@ def resolve_join_paths(catalog_db: Session, tables_used: list[str]) -> JoinPathR
 
     adjacency = _load_adjacency(catalog_db)
     root = target_ids[0]
-    preds = _bfs_shortest_paths(adjacency, root)
+    blocked = frozenset(name_to_id[t] for t in no_transit or [] if t in name_to_id)
+    preds = _bfs_shortest_paths(adjacency, root, blocked)
 
     edges_used: dict[str, JoinEdge] = {}
     unreachable_tables: list[str] = []
