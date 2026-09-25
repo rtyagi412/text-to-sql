@@ -2,7 +2,7 @@ import json
 import logging
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 
 import httpx2
@@ -47,6 +47,13 @@ class LlmJsonResult:
     usage: TokenUsage
     request_id: str | None
     attempts: int = 1
+
+    def after(self, earlier: "LlmJsonResult | None") -> "LlmJsonResult":
+        """This result with the token usage and attempts of `earlier` calls added, so a caller that makes several
+        calls can report what all of them cost."""
+        if earlier is None:
+            return self
+        return replace(self, usage=earlier.usage + self.usage, attempts=earlier.attempts + self.attempts)
 
 
 @lru_cache

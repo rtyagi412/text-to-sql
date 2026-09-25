@@ -45,6 +45,9 @@ class TokenUsage(BaseModel):
     cache_creation_input_tokens: int = 0
     cache_read_input_tokens: int = 0
 
+    def __add__(self, other: "TokenUsage") -> "TokenUsage":
+        return TokenUsage(**{name: getattr(self, name) + getattr(other, name) for name in TokenUsage.model_fields})
+
 
 class LlmCallAudit(BaseModel):
     """What produced this answer -- enough to reproduce or explain it later."""

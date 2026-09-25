@@ -20,7 +20,6 @@ from app.schemas.sql_generation import (
     MappedFilter,
     MatchedRitm,
     Operator,
-    TokenUsage,
 )
 from app.services import approved_ritm_service, filter_check_service, llm_service, schema_context_service
 from app.services.approved_ritm_service import SimilarRitm
@@ -109,10 +108,6 @@ def similar_examples(
     return [s for s in similar if all(t in existing for t in s.ritm.tables)]
 
 
-def add_usage(a: TokenUsage, b: TokenUsage) -> TokenUsage:
-    return TokenUsage(**{name: getattr(a, name) + getattr(b, name) for name in TokenUsage.model_fields})
-
-
 T = TypeVar("T")
 
 
@@ -145,8 +140,9 @@ def generate_checked(
             logger.info("no usable reply, asking again: %s", exc)
             prior, feedback = exc.raw, str(exc)
             continue
-        total = result if total is None else replace(result, usage=add_usage(total.usage, result.usage))
+        total = result.after(total)
         try:
+            # `calls` also counts the replies that came back unusable, which `total` never saw.
             return build(result.data), replace(total, attempts=calls)
         except (LlmOutputError, ValidationError) as exc:
             if attempt == 2:

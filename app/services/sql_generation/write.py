@@ -1,17 +1,21 @@
-"""Step 2, /sql/write: one validated, formatted T-SQL SELECT for the confirmed mapping."""
+"""Step 2, /sql/write: one validated, formatted T-SQL SELECT for the confirmed mapping.
+
+`write_sql` reads top to bottom as the five steps, the same shape as /sql/map."""
 
 import json
 import logging
 from dataclasses import dataclass
+from functools import partial
 
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.prompts.models import PromptVersion
 from app.schemas.ritm import Ritm
 from app.schemas.sql_generation import SqlWrite, SqlWriteRequest, SqlWriteResponse
 from app.services import schema_context_service, sql_check_service, sql_compile_service
 from app.services.approved_ritm_service import SimilarRitm
-from app.services.llm_service import LlmOutputError
+from app.services.llm_service import LlmJsonResult, LlmOutputError
 from app.services.ritm_service import get_ritm_by_id
 from app.services.schema_context_service import SchemaContext
 from app.services.sql_check_service import SqlRejectedError
@@ -30,6 +34,54 @@ from app.services.sql_generation.join_plan import join_plan as build_join_plan
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+
+def write_sql(request: SqlWriteRequest, catalog_db: Session, source_db: Session | None = None) -> SqlWriteResponse | None:
+    """Step 2, after the requester confirms the column mapping: one validated, formatted T-SQL SELECT. The schema
+    the model sees is exactly the mapped tables plus the bridge tables of their join plan. Nothing is saved: the SQL
+    joins the approved pool only through approve_sql, after someone has reviewed it. `source_db`, when given, is
+    asked to compile the query (see _compile_check). Returns None when the RITM does not exist."""
+    ritm = get_ritm_by_id(request.ritm_number)
+    if ritm is None:
+        return None
+    if not request.output_fields:
+        raise ValueError("output_fields is empty: there is nothing to select")
+    version = resolve_version(request.prompt_version, settings.write_prompt_version, "write")
+
+    join_plan, schema = _plan_joins(request, catalog_db)  # 1. how the mapped tables join, and the schema they need
+    examples = _find_similar_examples(request, ritm, catalog_db)  # 2. what similar approved SQL looks like
+    outcome, result = _ask_model(ritm, request, version, join_plan, schema, examples, source_db)  # 3 + 4. write, then check
+
+    write, checked = outcome.write, outcome.checked
+    call_audit = audit(version, result, schema=schema, examples=examples)
+    status = write.derive_status()
+    logger.info("sql write %s", json.dumps({"ritm": ritm.number, **call_audit.model_dump(), "status": status.value}))
+    return SqlWriteResponse(  # 5. the SQL, plus what was checked about it
+        **{**write.model_dump(), "sql": checked.sql if checked else None},
+        ritm_number=ritm.number,
+        status=status,
+        tables=checked.tables if checked else [],
+        warnings=[*(checked.warnings if checked else []), *([outcome.note] if outcome.note else [])],
+        compiled=outcome.compiled,
+        matched_ritms=matched_ritms(examples),
+        audit=call_audit,
+    )
+
+
+# --- 1. join plan and schema ------------------------------------------------------------------------------------
+
+
+def _plan_joins(request: SqlWriteRequest, catalog_db: Session) -> tuple[str, SchemaContext]:
+    """The join plan between the tables the confirmed mapping uses, and the schema of exactly those tables plus the
+    bridge tables the plan passes through. The request's columns are checked against that schema before anything
+    goes to the model."""
+    tables = list(
+        dict.fromkeys(item.table for item in (*request.output_fields, *request.filters, *request.additional_filters))
+    )
+    join_plan, bridge = build_join_plan(catalog_db, tables)
+    schema = schema_context_service.build_exact_schema_context(catalog_db, [*tables, *bridge])
+    _check_request_columns(request, schema)
+    return join_plan, schema
 
 
 def _check_request_columns(request: SqlWriteRequest, context: SchemaContext) -> None:
@@ -53,9 +105,53 @@ def _check_request_columns(request: SqlWriteRequest, context: SchemaContext) -> 
         raise ValueError("These filters cannot be applied as written: " + "; ".join(problems))
 
 
+# --- 2. similar approved RITMs ----------------------------------------------------------------------------------
+
+
+def _find_similar_examples(request: SqlWriteRequest, ritm: Ritm, catalog_db: Session) -> list[SimilarRitm]:
+    return similar_examples(
+        ", ".join(f.requested for f in request.output_fields),
+        render_criteria([(f.requested, f.operator, f.value) for f in request.filters]),
+        ritm.number,
+        catalog_db,
+    )
+
+
+# --- 3 + 4. ask the model, check its SQL ----------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _WriteOutcome:
+    write: SqlWrite
+    checked: sql_check_service.CheckedSql | None
+    compiled: bool  # SQL Server compiled the query and its output columns are the requested ones
+    note: str | None  # why the compile check did not run, when it was wanted but could not
+
+
+def _ask_model(
+    ritm: Ritm,
+    request: SqlWriteRequest,
+    version: PromptVersion,
+    join_plan: str,
+    schema: SchemaContext,
+    examples: list[SimilarRitm],
+    source_db: Session | None,
+) -> tuple[_WriteOutcome, LlmJsonResult]:
+    """Asks the model for the SQL. A reply that fails the checks is sent back once with the reasons
+    (`generate_checked`), so there are at most 2 model calls."""
+    return generate_checked(
+        system=system_blocks(version.system_prompt),
+        user_content=_build_write_content(ritm, request, schema, examples, join_plan),
+        schema=SqlWrite.generation_json_schema(),
+        model=request.model,
+        build=partial(_parse_answer, request=request, schema=schema, source_db=source_db),
+    )
+
+
 def _build_write_content(
     ritm: Ritm, request: SqlWriteRequest, schema: SchemaContext, examples: list[SimilarRitm], join_plan: str
 ) -> str:
+    """The user turn: the schema, the join plan, the similar examples, then the confirmed mapping."""
     confirmed = {
         "ritm_number": ritm.number,
         "title": ritm.name,
@@ -69,6 +165,18 @@ def _build_write_content(
     sections.insert(1, f"<join_plan>\n{join_plan}\n</join_plan>")
     sections.append(f"<confirmed_mapping>\n{json.dumps(confirmed, indent=2)}\n</confirmed_mapping>")
     return "\n\n".join(sections)
+
+
+def _parse_answer(data: dict, *, request: SqlWriteRequest, schema: SchemaContext, source_db: Session | None) -> _WriteOutcome:
+    """Step 4, run on every model reply by `generate_checked`: raising LlmOutputError is what sends the reply back
+    for a correction. The SQL must pass our own checks and then SQL Server's compile check."""
+    write = SqlWrite.model_validate(data)
+    if not write.sql:
+        return _WriteOutcome(write=write, checked=None, compiled=False, note=None)
+    checked = _check_generated_sql(write.sql, request, schema)
+    expected_headers = [f.requested for f in request.output_fields]
+    compiled, note = _compile_check(checked.sql, expected_headers, source_db)
+    return _WriteOutcome(write=write, checked=checked, compiled=compiled, note=note)
 
 
 def _check_generated_sql(sql: str, request: SqlWriteRequest, context: SchemaContext) -> sql_check_service.CheckedSql:
@@ -91,14 +199,6 @@ def _check_generated_sql(sql: str, request: SqlWriteRequest, context: SchemaCont
     return checked
 
 
-@dataclass(frozen=True)
-class _WriteOutcome:
-    write: SqlWrite
-    checked: sql_check_service.CheckedSql | None
-    compiled: bool  # SQL Server compiled the query and its output columns are the requested ones
-    note: str | None  # why the compile check did not run, when it was wanted but could not
-
-
 def _compile_check(sql: str, expected_headers: list[str], source_db: Session | None) -> tuple[bool, str | None]:
     """Has the source database compile the query (nothing runs, no rows are read). What it refuses, or a result
     whose columns are not the requested ones, is raised as LlmOutputError so the model is shown SQL Server's own
@@ -113,68 +213,3 @@ def _compile_check(sql: str, expected_headers: list[str], source_db: Session | N
     if outcome.columns != expected_headers:
         raise LlmOutputError(f"SQL Server reports the result columns as {outcome.columns}, expected {expected_headers}")
     return True, None
-
-
-def write_sql_for_ritm(
-    ritm: Ritm, request: SqlWriteRequest, catalog_db: Session, source_db: Session | None = None
-) -> SqlWriteResponse:
-    """Step 2, after the requester confirms the column mapping: one validated, formatted T-SQL SELECT. The schema
-    the model sees is exactly the mapped tables plus the bridge tables of their join plan. Nothing is saved: the SQL
-    joins the approved pool only through approve_sql, after someone has reviewed it. `source_db`, when given, is
-    asked to compile the query (see _compile_check)."""
-    if not request.output_fields:
-        raise ValueError("output_fields is empty: there is nothing to select")
-    version = resolve_version(request.prompt_version, settings.write_prompt_version, "write")
-
-    tables = list(
-        dict.fromkeys(item.table for item in (*request.output_fields, *request.filters, *request.additional_filters))
-    )
-    join_plan, bridge = build_join_plan(catalog_db, tables)
-    context = schema_context_service.build_exact_schema_context(catalog_db, [*tables, *bridge])
-    _check_request_columns(request, context)
-
-    examples = similar_examples(
-        ", ".join(f.requested for f in request.output_fields),
-        render_criteria([(f.requested, f.operator, f.value) for f in request.filters]),
-        ritm.number,
-        catalog_db,
-    )
-    expected_headers = [f.requested for f in request.output_fields]
-
-    def build(data: dict) -> _WriteOutcome:
-        write = SqlWrite.model_validate(data)
-        if not write.sql:
-            return _WriteOutcome(write=write, checked=None, compiled=False, note=None)
-        checked = _check_generated_sql(write.sql, request, context)
-        compiled, note = _compile_check(checked.sql, expected_headers, source_db)
-        return _WriteOutcome(write=write, checked=checked, compiled=compiled, note=note)
-
-    outcome, result = generate_checked(
-        system=system_blocks(version.system_prompt),
-        user_content=_build_write_content(ritm, request, context, examples, join_plan),
-        schema=SqlWrite.generation_json_schema(),
-        model=request.model,
-        build=build,
-    )
-    write, checked = outcome.write, outcome.checked
-
-    call_audit = audit(version, result, schema=context, examples=examples)
-    status = write.derive_status()
-    logger.info("sql write %s", json.dumps({"ritm": ritm.number, **call_audit.model_dump(), "status": status.value}))
-    return SqlWriteResponse(
-        **{**write.model_dump(), "sql": checked.sql if checked else None},
-        ritm_number=ritm.number,
-        status=status,
-        tables=checked.tables if checked else [],
-        warnings=[*(checked.warnings if checked else []), *([outcome.note] if outcome.note else [])],
-        compiled=outcome.compiled,
-        matched_ritms=matched_ritms(examples),
-        audit=call_audit,
-    )
-
-
-def write_sql(request: SqlWriteRequest, catalog_db: Session, source_db: Session | None = None) -> SqlWriteResponse | None:
-    ritm = get_ritm_by_id(request.ritm_number)
-    if ritm is None:
-        return None
-    return write_sql_for_ritm(ritm, request, catalog_db, source_db)

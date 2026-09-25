@@ -4,7 +4,7 @@
 
 import json
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import partial
 
 from sqlalchemy.orm import Session
@@ -19,7 +19,6 @@ from app.services.llm_service import LlmJsonResult, LlmOutputError
 from app.services.ritm_service import get_ritm_by_id
 from app.services.schema_context_service import SchemaContext
 from app.services.sql_generation.common import (
-    add_usage,
     audit,
     generate_checked,
     matched_ritms,
@@ -132,9 +131,7 @@ def _ask_model(
                 _parse_answer, request=request, schema=schema, examples=examples, known_tables=known_tables, may_ask=may_ask
             ),
         )
-        total = result if total is None else replace(
-            result, usage=add_usage(total.usage, result.usage), attempts=total.attempts + result.attempts
-        )
+        total = result.after(total)
         if not answer.tables_needed:
             break
         requested = answer.tables_needed
