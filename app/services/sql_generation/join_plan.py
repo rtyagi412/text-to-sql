@@ -1,16 +1,11 @@
 """The deterministic foreign-key join plan the write stage shows the model."""
 
+from dataclasses import dataclass
+
 from sqlalchemy.orm import Session
 
-from app.schemas.catalog import JoinEdge
+from app.schemas.catalog import AmbiguousJoinPath, JoinEdge
 from app.services.join_service import hub_tables, resolve_join_paths
-
-
-def _edge_text(edge: JoinEdge) -> str:
-    return (
-        f"{edge.from_schema}.{edge.from_table}.{edge.from_column} -> "
-        f"{edge.to_schema}.{edge.to_table}.{edge.to_column}"
-    )
 
 
 def join_plan(catalog_db: Session, tables: list[str]) -> tuple[str, list[str]]:
@@ -23,6 +18,21 @@ def join_plan(catalog_db: Session, tables: list[str]) -> tuple[str, list[str]]:
     settlement is 2 hops; customer <- order <- payment <- settlement_payment -> settlement is 4). A table that
     can only be reached through a hub is joined that way as a flagged fallback. Equally short paths are all
     shown, with their tables, and the right path's tables must be in the schema."""
+    resolved = _resolve(catalog_db, tables)
+    return _render(resolved, tables), _bridge_tables(resolved, tables)
+
+
+@dataclass(frozen=True)
+class _ResolvedJoins:
+    start: str  # the table the search started from; every other table is joined towards it
+    edges: list[JoinEdge]  # the foreign keys to join along
+    ambiguous_joins: list[AmbiguousJoinPath]  # pairs of tables that connect along several equally short paths
+    via_hub: list[str]  # tables connected to `start` only through a hub (the flagged fallback)
+    unreachable: list[str]  # tables with no foreign-key path to `start`, even through a hub
+
+
+def _resolve(catalog_db: Session, tables: list[str]) -> _ResolvedJoins:
+    """Finds the paths without running through a hub; whatever that leaves unreachable is retried allowing hubs."""
     hubs = hub_tables(catalog_db)
     # The search starts from the first table; a hub as the start would fan out to all its children at once.
     ordered = [*(t for t in tables if t not in hubs), *(t for t in tables if t in hubs)]
@@ -40,30 +50,32 @@ def join_plan(catalog_db: Session, tables: list[str]) -> tuple[str, list[str]]:
         unreachable = list(fallback.unreachable_tables)
         via_hub = [table for table in result.unreachable_tables if table not in unreachable]
 
+    return _ResolvedJoins(
+        start=ordered[0] if ordered else "",
+        edges=edges,
+        ambiguous_joins=ambiguous_joins,
+        via_hub=via_hub,
+        unreachable=unreachable,
+    )
+
+
+def _render(resolved: _ResolvedJoins, tables: list[str]) -> str:
+    """The plan as prompt text: the edges, then a flagged line for each hub path, unreachable table and ambiguity."""
     lines = ["JOIN PLAN (shortest foreign-key paths between the tables the report needs; join only along these keys)"]
-    bridge: list[str] = []
-
-    def note_bridge(edge: JoinEdge) -> None:
-        for key in (f"{edge.from_schema}.{edge.from_table}", f"{edge.to_schema}.{edge.to_table}"):
-            if key not in tables and key not in bridge:
-                bridge.append(key)
-
-    for edge in edges:
-        lines.append(f"  {_edge_text(edge)}")
-        note_bridge(edge)
+    lines += [f"  {_edge_text(edge)}" for edge in resolved.edges]
     if len(tables) == 1:
         lines.append("  (a single table: no join is needed)")
-    elif not edges and not unreachable:
+    elif not resolved.edges and not resolved.unreachable:
         lines.append("  (none needed)")
-    if via_hub:
+    if resolved.via_hub:
         lines.append(
-            f"HUB PATH ({', '.join(via_hub)}): connected to {ordered[0]} only through a shared parent table that both "
-            "reference. Such a join pairs each row with every row of the same parent. Use it only if the report is "
-            "about that parent; otherwise ask."
+            f"HUB PATH ({', '.join(resolved.via_hub)}): connected to {resolved.start} only through a shared parent table "
+            "that both reference. Such a join pairs each row with every row of the same parent. Use it only if the "
+            "report is about that parent; otherwise ask."
         )
-    for table in unreachable:
-        lines.append(f"UNREACHABLE: {table} has no foreign-key path to {ordered[0]}")
-    for ambiguous in ambiguous_joins:
+    for table in resolved.unreachable:
+        lines.append(f"UNREACHABLE: {table} has no foreign-key path to {resolved.start}")
+    for ambiguous in resolved.ambiguous_joins:
         lines.append(
             f"AMBIGUOUS: {ambiguous.table_a} and {ambiguous.table_b} connect along {len(ambiguous.path_options)} "
             "equally short paths. Choose the one that relates the two directly (see the rules); the edges listed "
@@ -71,6 +83,23 @@ def join_plan(catalog_db: Session, tables: list[str]) -> tuple[str, list[str]]:
         )
         for number, option in enumerate(ambiguous.path_options, start=1):
             lines.append(f"  option {number}: " + "; ".join(_edge_text(edge) for edge in option))
-            for edge in option:
-                note_bridge(edge)
-    return "\n".join(lines), bridge
+    return "\n".join(lines)
+
+
+def _bridge_tables(resolved: _ResolvedJoins, tables: list[str]) -> list[str]:
+    """Tables the paths pass through that the report itself does not use. They must be in the schema the model sees,
+    including those on the alternative paths of an ambiguous join."""
+    bridge: list[str] = []
+    all_edges = [*resolved.edges, *(edge for ambiguous in resolved.ambiguous_joins for option in ambiguous.path_options for edge in option)]
+    for edge in all_edges:
+        for key in (f"{edge.from_schema}.{edge.from_table}", f"{edge.to_schema}.{edge.to_table}"):
+            if key not in tables and key not in bridge:
+                bridge.append(key)
+    return bridge
+
+
+def _edge_text(edge: JoinEdge) -> str:
+    return (
+        f"{edge.from_schema}.{edge.from_table}.{edge.from_column} -> "
+        f"{edge.to_schema}.{edge.to_table}.{edge.to_column}"
+    )
