@@ -1,6 +1,8 @@
 from collections import deque
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -121,6 +123,25 @@ def _path_start(path: list[RelEdge], starts: frozenset[int]) -> int:
     """The start table a path (ordered from its start to its target) begins at."""
     first = path[0]
     return first.fk_table_id if first.fk_table_id in starts else first.pk_table_id
+
+
+def hub_tables(catalog_db: Session) -> list[str]:
+    """Tables a join path must not run through: the ones named in `catalog_hub_tables`, else those that at least
+    `catalog_hub_min_references` foreign keys point at (typically the tenant table). Two tables that both
+    reference a hub are not related to each other through it: joining on it pairs each row with every row of the
+    same parent."""
+    patterns = [p.strip().lower() for p in settings.catalog_hub_tables.split(",") if p.strip()]
+    if patterns:
+        name_to_id, _ = _load_table_maps(catalog_db)
+        return sorted(key for key in name_to_id if any(fnmatchcase(key.lower(), p) for p in patterns))
+    rows = (
+        catalog_db.query(SchemaTable.schema_name, SchemaTable.table_name)
+        .join(SchemaRelationship, SchemaRelationship.pk_table_id == SchemaTable.id)
+        .group_by(SchemaTable.id, SchemaTable.schema_name, SchemaTable.table_name)
+        .having(func.count(SchemaRelationship.id) >= settings.catalog_hub_min_references)
+        .all()
+    )
+    return [f"{schema}.{table}" for schema, table in rows]
 
 
 def resolve_join_paths(

@@ -3,8 +3,7 @@
 from sqlalchemy.orm import Session
 
 from app.schemas.catalog import JoinEdge
-from app.services import schema_context_service
-from app.services.join_service import resolve_join_paths
+from app.services.join_service import hub_tables, resolve_join_paths
 
 
 def _edge_text(edge: JoinEdge) -> str:
@@ -24,7 +23,7 @@ def join_plan(catalog_db: Session, tables: list[str]) -> tuple[str, list[str]]:
     settlement is 2 hops; customer <- order <- payment <- settlement_payment -> settlement is 4). A table that
     can only be reached through a hub is joined that way as a flagged fallback. Equally short paths are all
     shown, with their tables, and the right path's tables must be in the schema."""
-    hubs = schema_context_service.hub_tables(catalog_db)
+    hubs = hub_tables(catalog_db)
     # The search starts from the first table; a hub as the start would fan out to all its children at once.
     ordered = [*(t for t in tables if t not in hubs), *(t for t in tables if t in hubs)]
     result = resolve_join_paths(catalog_db, ordered, no_transit=hubs, grow_tree=True)

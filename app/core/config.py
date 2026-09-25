@@ -62,14 +62,16 @@ class Settings(BaseSettings):
     embedding_model: str = "voyage-code-4"
     embedding_dim: int = 1024
 
+    # Table search (retrieval_service): each table scores keyword_weight * keyword match + semantic_weight * embedding match.
     retrieval_keyword_weight: float = 0.5
     retrieval_semantic_weight: float = 0.5
-    retrieval_top_k: int = 5
+    retrieval_top_k: int = 5  # only the default for a caller that passes no top_k; GET /catalog/search and schema selection both do
 
-    # Schema context handed to the model: tables surfaced by retrieval, plus FK neighbours, capped.
-    schema_search_top_k: int = 5
-    schema_max_queries: int = 10
-    schema_max_tables: int = 20
+    # The schema slice /sql/map shows the model (schema_context_service): several search queries are run, their top
+    # tables are ranked by how many queries found them, then FK neighbours fill the remaining room.
+    schema_max_queries: int = 10  # search queries per request: the whole request, then one per field and per condition
+    schema_search_top_k: int = 5  # tables taken from each query's results
+    schema_max_tables: int = 20  # cap on the slice: tables from similar examples, search hits and FK neighbours together
 
     # Approved (already-solved) RITMs shown to the model as reference solutions. They are embedded in memory, so
     # they can use a different model from the schema catalog. voyage-code-4 (the catalog's model) ranked the
