@@ -18,7 +18,6 @@ class Settings(BaseSettings):
 
     ritm_samples_path: Path = PROJECT_ROOT / "ritm_samples.json"
     approved_ritms_path: Path = PROJECT_ROOT / "approved_ritms.json"
-    business_glossary_path: Path = PROJECT_ROOT / "business_glossary.md"
 
     db_server: str
     db_name: str
@@ -26,21 +25,28 @@ class Settings(BaseSettings):
     db_encrypt: bool = True
     db_trust_server_certificate: bool = False
 
-    # Falls back to the SDK's own credential resolution (ANTHROPIC_API_KEY env var / `ant auth login`) when unset.
-    anthropic_api_key: str | None = None
-    claude_model: str = "claude-opus-5"
-    claude_max_tokens: int = 16000
-    claude_timeout: float = 300.0
-    claude_max_retries: int = 2
-    claude_effort: str | None = None
-    claude_use_fallbacks: bool = True
+    # The model behind the extract, map and write stages: DeepSeek's OpenAI-format chat API, JSON mode.
+    deepseek_api_key: str | None = None
+    deepseek_base_url: str = "https://api.deepseek.com"
+    llm_model: str = "deepseek-flash"  # or "deepseek-v4-pro"
+    llm_max_tokens: int = 8192
+    llm_timeout: float = 300.0
+    llm_max_retries: int = 2  # extra attempts on 429 / 5xx / timeouts
+    # Thinking is off: JSON mode together with thinking is undocumented, and temperature has no effect while it is
+    # on. With it off the answers are made repeatable by a fixed temperature of 0.
+    llm_temperature: float = 0.0
+    llm_thinking: bool = False
+    llm_reasoning_effort: str | None = None  # low | high | max, only with LLM_THINKING=true
 
     extract_prompt_version: str = "extract-v1"
     mapping_prompt_version: str = "mapping-v1"
     write_prompt_version: str = "write-v1"
+    # Ask the source database to compile each written query (no execution, no rows read) so the model can be shown
+    # SQL Server's own errors. A server that cannot be reached skips the check instead of failing the request.
+    write_compile_check: bool = True
 
-    # Redact emails / long digit runs from the RITM `summary` before it leaves the network boundary.
-    redact_ritm_summary: bool = True
+    # Redact emails / long digit runs from the RITM `description` before it leaves the network boundary.
+    redact_ritm_description: bool = True
 
     catalog_db_server: str = "localhost"
     catalog_db_port: int = 5435
@@ -48,7 +54,7 @@ class Settings(BaseSettings):
     catalog_db_user: str = "catalog"
     catalog_db_password: str = "catalog"
 
-    # Embeddings come from Voyage AI (Anthropic's recommended provider; Claude has no embeddings API).
+    # Embeddings come from Voyage AI (DeepSeek has no embeddings API).
     # Changing the model or dimension requires rebuilding the catalog tables (see the pgvector column size).
     voyage_api_key: str | None = None
     voyage_base_url: str = "https://api.voyageai.com/v1"
@@ -60,12 +66,12 @@ class Settings(BaseSettings):
     retrieval_semantic_weight: float = 0.5
     retrieval_top_k: int = 5
 
-    # Schema context handed to Claude: tables surfaced by retrieval, plus FK neighbours, capped.
+    # Schema context handed to the model: tables surfaced by retrieval, plus FK neighbours, capped.
     schema_search_top_k: int = 5
     schema_max_queries: int = 10
     schema_max_tables: int = 20
 
-    # Approved (already-solved) RITMs shown to Claude as reference solutions. They are embedded in memory, so
+    # Approved (already-solved) RITMs shown to the model as reference solutions. They are embedded in memory, so
     # they can use a different model from the schema catalog. voyage-code-4 (the catalog's model) ranked the
     # right family first for 8 of 10 test tickets and its scores overlapped the wrong ones; voyage-4 got 10 of
     # 10, with the right family scoring at least 0.58. The floor is only a coarse filter on top of the
@@ -77,6 +83,10 @@ class Settings(BaseSettings):
     catalog_join_path_cap: int = 5
     # A table this many foreign keys point at is a hub (merchant): join paths may end at one but not pass through it.
     catalog_hub_min_references: int = 5
+    # Which tables are hubs, named outright: comma-separated "schema.table" or "schema.*" (case-insensitive). The
+    # count above only suits a schema with one tenant-like table; in a banking schema it also catches the core
+    # entities (account, customer, loan) that reports legitimately join through. Empty falls back to the count.
+    catalog_hub_tables: str = ""
 
     @property
     def catalog_database_url(self) -> str:

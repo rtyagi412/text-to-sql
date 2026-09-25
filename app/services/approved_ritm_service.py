@@ -18,14 +18,13 @@ _write_lock = threading.Lock()
 
 class ApprovedRitm(BaseModel):
     """A solved, reviewed ticket. Exactly one outcome: approved `sql`, or the `clarifications` that were
-    the right answer (kept so Claude sees where the line between "ask" and "assume" was drawn)."""
+    the right answer (kept so the model sees where the line between "ask" and "assume" was drawn)."""
 
     model_config = ConfigDict(extra="forbid")
 
     number: str
     output_fields: str
     report_criteria: str
-    summary: str = ""
     tables: list[str] = Field(default_factory=list, description='Tables the SQL uses, as "schema.table".')
     sql: str | None = None
     clarifications: list[str] = Field(default_factory=list)

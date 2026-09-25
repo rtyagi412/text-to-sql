@@ -1,13 +1,13 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-import anthropic
 import httpx2
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.db.catalog_session import get_catalog_db
+from app.db.session import get_db
 from app.schemas.sql_generation import (
     ApproveSqlRequest,
     ApproveSqlResponse,
@@ -18,33 +18,30 @@ from app.schemas.sql_generation import (
     SqlWriteRequest,
     SqlWriteResponse,
 )
-from app.services.claude_service import ClaudeOutputError, ClaudeRefusalError
+from app.services.llm_service import LlmApiError, LlmConfigError, LlmOutputError, LlmRefusalError
 from app.services.embedding_service import EmbeddingConfigError
 from app.services.schema_context_service import CatalogEmptyError
-from app.services.sql_generation_service import (
-    approve_sql,
-    extract_requirements,
-    map_columns,
-    write_sql,
-)
+from app.services.sql_generation import approve_sql, extract_requirements, map_columns, write_sql
 
 router = APIRouter(prefix="/sql", tags=["sql"])
 
 
 @contextmanager
 def _http_errors() -> Iterator[None]:
-    # ValueError comes last: pydantic's ValidationError is a ValueError, and a malformed Claude response
+    # ValueError comes last: pydantic's ValidationError is a ValueError, and a malformed model response
     # is a 502, not the caller's 400.
     try:
         yield
     except CatalogEmptyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except ClaudeRefusalError as exc:
+    except LlmRefusalError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except (ClaudeOutputError, ValidationError) as exc:
-        raise HTTPException(status_code=502, detail=f"Claude returned an unusable response: {exc}") from exc
-    except anthropic.APIError as exc:
-        raise HTTPException(status_code=502, detail=f"Claude API error: {exc}") from exc
+    except LlmConfigError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (LlmOutputError, ValidationError) as exc:
+        raise HTTPException(status_code=502, detail=f"The model returned an unusable response: {exc}") from exc
+    except LlmApiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except EmbeddingConfigError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except httpx2.HTTPError as exc:
@@ -55,7 +52,7 @@ def _http_errors() -> Iterator[None]:
 
 @router.post("/extract", response_model=RitmExtractionResponse)
 def extract(body: ExtractionRequest) -> RitmExtractionResponse:
-    """Step 0, shown to the requester first: reads only the RITM and has Claude state the fields the report
+    """Step 0, shown to the requester first: reads only the RITM and has the model state the fields the report
     displays and the conditions it filters on, in the ticket's own business terms. No catalog, embeddings or
     approved examples are used and no column names are guessed; those come after the requester confirms."""
     with _http_errors():
@@ -85,13 +82,14 @@ def map_to_columns(
 def write(
     body: SqlWriteRequest,
     catalog_db: Session = Depends(get_catalog_db),
+    source_db: Session = Depends(get_db),
 ) -> SqlWriteResponse:
     """Step 2, after the requester confirms the /sql/map result (post that response back, with any proposed
     additional filter they rejected deleted): writes one T-SQL SELECT, validated against the catalog, formatted,
-    and checked for performance smells (returned as warnings). Nothing is saved: call /sql/approve once the SQL
-    has been reviewed."""
+    compiled by the source database (nothing is executed), and checked for performance smells (returned as
+    warnings). Nothing is saved: call /sql/approve once the SQL has been reviewed."""
     with _http_errors():
-        result = write_sql(body, catalog_db)
+        result = write_sql(body, catalog_db, source_db)
     if result is None:
         raise HTTPException(status_code=404, detail=f"RITM '{body.ritm_number}' not found")
     return result

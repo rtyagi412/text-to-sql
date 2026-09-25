@@ -70,7 +70,7 @@ PROMPT_VERSION = PromptVersion(
     id="write-v1",
     stage="write",
     description=(
-        "SQL-writing stage. Runs after the requester confirms the column mapping. Claude sees exactly the mapped "
+        "SQL-writing stage. Runs after the requester confirms the column mapping. The model sees exactly the mapped "
         "tables plus the join plan between them, the business glossary, similar approved SQL for house style, and "
         "the confirmed mapping (including accepted extra filters), and writes one T-SQL SELECT with sargable "
         "predicates, minimal joins, EXISTS for existence tests and type-matched literals. The service validates "

@@ -1,155 +1,502 @@
 [
   {
-    "number": "RITM0030001",
-    "name": "Database Report Request - Active Merchant Directory",
+    "number": "RITM0040001",
+    "name": "Database Report Request - Customer Touchpoint Directory",
     "variables": {
-      "output_fields": "Merchant Number, Merchant Fullname, Business Type, Status, Onboarded Date",
-      "report_criteria": "Merchants currently in an active status.",
-      "summary": "Sales Ops wants a weekly directory of currently active merchants for account coverage planning."
+      "output_fields": "Customer Number, Customer Name, Touchpoint Type, Touchpoint Value, Is Primary, Valid From, Valid To",
+      "report_criteria": "Active customers only. Combine every way of reaching a customer into one list: emails and phone numbers, postal addresses (formatted as street, city, postal code, country) and, for organizations, the registered website. Only touchpoints that are valid as of today. Sort by customer number, then touchpoint type.",
+      "description": "Relationship management wants one consolidated contact sheet per customer instead of separate contact, address and website extracts.",
+      "report_usage": "Monthly SSRS report for Relationship Managers"
     }
   },
   {
-    "number": "RITM0030002",
-    "name": "Database Report Request - Customer Contact Export",
+    "number": "RITM0040002",
+    "name": "Database Report Request - Active Customers and Their Current Accounts",
     "variables": {
-      "output_fields": "Customer ID, Merchant Name, Name, Email, Phone",
-      "report_criteria": "All customers, no filtering.",
-      "summary": "Support wants a monthly export of all customer contact details across 9278425352 for outreach."
+      "output_fields": "Customer Number, Customer Name, Account Number, Account Type, Currency, Account Status, Opened On, Ownership Percent",
+      "report_criteria": "Customers with status ACTIVE who currently own an account (owner role only, ownership valid as of today). Exclude closed accounts. One row per customer and account pair.",
+      "description": "Branch operations needs a current customer-to-account listing for a quarterly relationship review.",
+      "report_usage": "Quarterly branch review pack"
     }
   },
   {
-    "number": "RITM0030003",
-    "name": "Database Report Request - Failed Payments Last 7 Days",
+    "number": "RITM0040003",
+    "name": "Database Report Request - Customer Account Listing",
     "variables": {
-      "output_fields": "Payment ID, Order ID, Merchant ID, Amount, Currency, Error Code, Error Description, Failed At",
-      "report_criteria": "Payments with a status of Failed, where the payment failed within the last 7 days.",
-      "summary": "Risk Ops wants a daily SSRS report of payments that failed in the last 7 days, including gateway error details, to spot recurring failure patterns."
+      "output_fields": "Customer Number, Customer Name, Account Number, Account Type, Currency, Status, Opened On",
+      "report_criteria": "All customers who currently have accounts with the bank, showing each account they are linked to.",
+      "description": "The service desk needs a lookup list of which accounts belong to which customers.",
+      "report_usage": "Reference list for the service desk"
     }
   },
   {
-    "number": "RITM0030004",
-    "name": "Database Report Request - Order Status Snapshot for Q1",
+    "number": "RITM0040004",
+    "name": "Database Report Request - High-Risk Customers Overdue for KYC Review",
     "variables": {
-      "output_fields": "Order ID, Merchant ID, Amount, Currency, Order Status, Created At",
-      "report_criteria": "Orders with a status of Paid or Cancelled, created between 2026-01-01 and 2026-03-31.",
-      "summary": "Finance wants a one-time Excel export of paid and cancelled orders from Q1 2026 for quarter-close reconciliation."
+      "output_fields": "Customer Number, Customer Name, Risk Rating, KYC Status, KYC Review Due Date, Days Overdue, Relationship Manager",
+      "report_criteria": "Active customers rated HIGH risk whose KYC review due date is earlier than today. Show the number of days overdue and the relationship manager's display name. Most overdue first.",
+      "description": "Compliance needs to chase overdue periodic reviews for the highest-risk customers.",
+      "report_usage": "Weekly compliance follow-up"
     }
   },
   {
-    "number": "RITM0030005",
-    "name": "Database Report Request - Card Refund Reconciliation",
+    "number": "RITM0040005",
+    "name": "Database Report Request - Overdue KYC Reviews with Last Completed Review",
     "variables": {
-      "output_fields": "Refund ID, Merchant ID, Refund Amount, Refund Status, Original Payment Method, Processed At",
-      "report_criteria": "Refunds with a status of Processed, where the original payment method was Card.",
-      "summary": "Finance wants a weekly ECG feed of processed card refunds, including the original payment method, for card-network reconciliation."
+      "output_fields": "Customer Number, Customer Name, Customer Type, Risk Rating, KYC Review Due Date, Last Completed Review Date, Last Review Type, Last Reviewer, Last Review Risk Score",
+      "report_criteria": "Active customers with HIGH risk rating whose KYC review is overdue as of today, together with details of their most recent completed KYC review. Customers who never had a completed review must still appear with blank review details.",
+      "description": "Same overdue population as the standard KYC follow-up, but Compliance also wants to see what happened in the last review before chasing.",
+      "report_usage": "Monthly SSRS report for Compliance"
     }
   },
   {
-    "number": "RITM0030006",
-    "name": "Database Report Request - High-Value Orders with Card Payments",
+    "number": "RITM0040006",
+    "name": "Database Report Request - KYC Summary vs Review History Mismatch",
     "variables": {
-      "output_fields": "Order ID, Merchant ID, Order Amount, Order Status, Payment Method, Payment Status",
-      "report_criteria": "Orders with an amount greater than 5000, where the payment method used was Card.",
-      "summary": "Finance wants a weekly SSRS report of high-value orders paid via card, to review large-ticket transaction patterns."
+      "output_fields": "Customer Number, Customer Name, Customer KYC Status, Customer Next Review Date, Latest Review Status, Latest Review Next Review Date, Mismatch Reason",
+      "report_criteria": "Customers where the current KYC summary on the customer record disagrees with their latest KYC review: the next review dates differ, or the latest review is not complete while the customer is marked VERIFIED, or the customer has no review history at all. State the reason for each mismatch.",
+      "description": "The data quality team suspects the KYC summary on the customer master has drifted from the review history.",
+      "report_usage": "Data quality audit"
     }
   },
   {
-    "number": "RITM0030007",
-    "name": "Database Report Request - Processed and Failed Settlements Including UPI Payments",
+    "number": "RITM0040007",
+    "name": "Database Report Request - Ultimate Beneficial Owners Through Corporate Layers",
     "variables": {
-      "output_fields": "Settlement ID, Merchant ID, Net Amount, Status, Bank Reference, Processed At",
-      "report_criteria": "Settlements with a status of Processed or Failed, with a net amount between 10000 and 100000, that include at least one payment made via UPI.",
-      "summary": "Reconciliation team wants a daily ECG feed of mid-to-large settlements in processed or failed status that included any UPI payment, to investigate UPI-specific settlement issues."
+      "output_fields": "Organization Name, Ultimate Owner Name, Ownership Levels, Effective Ownership Percent, Ownership Path",
+      "report_criteria": "For each organization customer, trace beneficial-owner relationships valid today through any intermediate holding companies and multiply the percentages along each path to get effective ownership. List only owners who are persons and whose effective ownership is 25% or more.",
+      "description": "The AML team needs true ultimate beneficial owner identification across layered ownership structures.",
+      "report_usage": "Monthly SSRS report for AML"
     }
   },
   {
-    "number": "RITM0030008",
-    "name": "Database Report Request - Unreplayed Dead-Lettered Webhook Events",
+    "number": "RITM0040008",
+    "name": "Database Report Request - Beneficial Owners Holding 25% or More",
     "variables": {
-      "output_fields": "DLQ Event ID, Merchant ID, Webhook Event ID, Event Type, Final Error, Moved At",
-      "report_criteria": "Dead-lettered webhook events that have not been replayed, moved to the DLQ within the last 30 days.",
-      "summary": "Platform Engineering wants a daily SSRS report of unreplayed dead-lettered webhook events from the last 30 days to prioritize manual replay triage."
+      "output_fields": "Company Name, Owner Name, Owner Customer Number, Ownership Percent, Relationship Start Date",
+      "report_criteria": "Beneficial-owner relationships valid today where the owner holds at least 25% of the company. Direct relationships only.",
+      "description": "Simplified beneficial ownership list for onboarding checks.",
+      "report_usage": "Onboarding checklist"
     }
   },
   {
-    "number": "RITM0030009",
-    "name": "Database Report Request - Capture Failure Audit Trail",
+    "number": "RITM0040009",
+    "name": "Database Report Request - Expiring Identity Documents Without Replacement",
     "variables": {
-      "output_fields": "Transition ID, Payment ID, From Status, To Status, Event, Occurred At, Order Receipt, Merchant Name",
-      "report_criteria": "Payment state transitions with an event of Capture Fail, for orders with an amount greater than 2000, occurring in the last 90 days.",
-      "summary": "Risk team wants a weekly SSRS audit trail of capture failures on high-value orders, including order receipt and merchant identity, to investigate processor-side capture issues."
+      "output_fields": "Customer Number, Customer Name, Document Type, Issuing Country, Expiry Date, Days To Expiry",
+      "report_criteria": "Identity documents of types that carry an expiry, expiring within the next 90 days or already expired, for active customers, where the customer has no other document of the same type with a later expiry date.",
+      "description": "Customers whose only proof of identity of a given type is about to lapse must be contacted.",
+      "report_usage": "Monthly customer outreach list"
     }
   },
   {
-    "number": "RITM0030010",
-    "name": "Database Report Request - Card Payment Lifecycle Trace for Refunded High-Value Orders",
+    "number": "RITM0040010",
+    "name": "Database Report Request - Marketing Consent Compliance",
     "variables": {
-      "output_fields": "Customer ID, Customer Email, Card Token, Card Brand, Card Last Four, Order ID, Order Receipt, Payment ID, Payment Status, Refund Amount, Refund Status, Settlement ID, Settlement Status, Merchant Name",
-      "report_criteria": "Card payments on orders with an amount greater than 10000, created within the last 12 months, where the payment was fully refunded and the related settlement is in Processed status, excluding revoked card tokens.",
-      "summary": "Risk and Compliance want a monthly SSRS trace connecting high-value refunded card orders through to their settlement outcome and card-vault status, to audit the full payment lifecycle for large transactions."
+      "output_fields": "Customer Number, Customer Name, Marketing Suppressed Flag, Latest Marketing Consent Status, Consent Channel, Granted At, Revoked At, Policy Version",
+      "report_criteria": "Customers who are not suppressed for marketing but have no currently active marketing consent (consent purpose containing MARKETING and not revoked). Use the latest consent record per customer and include customers with no consent record at all.",
+      "description": "The privacy office wants to catch customers who could be contacted without valid consent.",
+      "report_usage": "Privacy compliance check"
     }
   },
   {
-    "number": "RITM0030011",
-    "name": "Database Report Request - Live API Key Roster",
+    "number": "RITM0040011",
+    "name": "Database Report Request - Customer Risk Flags",
     "variables": {
-      "output_fields": "Key ID, Merchant ID, Environment, Enabled, Last Used At, Rotated At",
-      "report_criteria": "API keys in the Live environment that are currently enabled.",
-      "summary": "Security wants a weekly report of enabled live API keys, but hasn't specified how the report should be delivered."
+      "output_fields": "Customer Number, Customer Name, Flag Type, Risk Rating, Customer Status, Home Branch",
+      "report_criteria": "One row per flag per customer, for customers that are politically exposed, related party, staff, non-resident, or have a vulnerability code. A customer with three flags appears three times.",
+      "description": "Compliance reporting expects flags as rows rather than as separate yes/no columns.",
+      "report_usage": "Regulatory return input"
     }
   },
   {
-    "number": "RITM0030012",
-    "name": "Database Report Request - Merchant Dashboard User Roster",
+    "number": "RITM0040012",
+    "name": "Database Report Request - Joint Account Ownership Completeness",
     "variables": {
-      "output_fields": "",
-      "report_criteria": "Dashboard users belonging to merchants in an active status, with a role of Owner or Admin.",
-      "summary": "Merchant Success wants a monthly Excel export of owner/admin dashboard users at active merchants, but hasn't said which fields to include yet."
+      "output_fields": "Account Number, Account Name, Currency, Number of Current Owners, Total Ownership Percent, Primary Owner Name, Issue",
+      "report_criteria": "Accounts marked as joint accounts, with their current owners. Flag accounts where total ownership does not equal 100%, where there is only one current owner, or where no primary owner exists.",
+      "description": "Operations found joint accounts whose ownership records look incomplete.",
+      "report_usage": "Operations data cleanup"
     }
   },
   {
-    "number": "RITM0030013",
-    "name": "Database Report Request - Webhook Subscription Overview",
+    "number": "RITM0040013",
+    "name": "Database Report Request - Book Balance vs Latest Snapshot",
     "variables": {
-      "output_fields": "Config ID, Merchant ID, Target URL, Enabled, Subscribed Event Types",
+      "output_fields": "Account Number, Currency, Ledger Book Balance, Snapshot Date, Snapshot Book Balance, Difference",
+      "report_criteria": "For savings and current accounts, compare the balance computed from posted ledger entries with the most recent end-of-day balance snapshot. Show only accounts where the difference is not zero or where no snapshot exists.",
+      "description": "Finance wants to know whether the rebuildable balance snapshot is stale.",
+      "report_usage": "Daily finance control"
+    }
+  },
+  {
+    "number": "RITM0040014",
+    "name": "Database Report Request - Accounts with Active Holds and Available Balance",
+    "variables": {
+      "output_fields": "Account Number, Account Name, Currency, Book Balance, Total Active Holds, Number of Active Holds, Indicative Available Balance",
+      "report_criteria": "Savings and current accounts that currently have at least one active, unexpired hold. Show book balance from posted entries, the held total and the indicative available balance.",
+      "description": "The contact centre needs to explain to customers why they cannot spend their full balance.",
+      "report_usage": "Contact centre lookup"
+    }
+  },
+  {
+    "number": "RITM0040015",
+    "name": "Database Report Request - Current Balance of All Accounts",
+    "variables": {
+      "output_fields": "Account Number, Account Name, Currency, Balance",
+      "report_criteria": "Current balance of all accounts.",
+      "description": "Management wants a simple balance list.",
+      "report_usage": "something"
+    }
+  },
+  {
+    "number": "RITM0040016",
+    "name": "Database Report Request - Accounts Under Active Restriction",
+    "variables": {
+      "output_fields": "Account Number, Account Holder Names, Restriction Type, Reason Description, Effective From, Effective To, Authority Reference, Debit Allowed, Credit Allowed",
+      "report_criteria": "Accounts with a restriction in force right now (effective from is in the past and effective to is empty or in the future). Combine the names of all current owners into one field.",
+      "description": "Legal needs an inventory of frozen or restricted accounts and who is affected.",
+      "report_usage": "Monthly SSRS report for Legal"
+    }
+  },
+  {
+    "number": "RITM0040017",
+    "name": "Database Report Request - Dormancy Candidates",
+    "variables": {
+      "output_fields": "Account Number, Account Name, Currency, Last Activity Date, Detection Rule, Days Inactive, Book Balance",
+      "report_criteria": "ACTIVE non-loan accounts that either (a) have had no posted ledger entry in the last 180 days, or (b) have a last customer activity date more than 180 days ago or never recorded. If an account matches both rules it must appear once for each rule.",
+      "description": "The dormancy team wants to compare which rule catches which accounts before any status change is made.",
+      "report_usage": "Quarterly dormancy review"
+    }
+  },
+  {
+    "number": "RITM0040018",
+    "name": "Database Report Request - Negotiated vs Product Interest Rate",
+    "variables": {
+      "output_fields": "Account Number, Product Name, Currency, Product Rate, Negotiated Rate, Rate Difference, Negotiated From, Approved By",
+      "report_criteria": "Accounts with a negotiated rate in effect today whose rate is higher than the base tier rate (tier starting at zero) of the account's booked product version, in effect today, for the same currency.",
+      "description": "Product control monitors preferential pricing granted to individual accounts.",
+      "report_usage": "Monthly pricing committee pack"
+    }
+  },
+  {
+    "number": "RITM0040019",
+    "name": "Database Report Request - Trial Balance by GL and Currency",
+    "variables": {
+      "output_fields": "Legal Entity, Currency, GL Code, GL Name, Debit Total, Credit Total, Net Balance",
+      "report_criteria": "Posted journals only, grouped by legal entity, currency and GL account, with a subtotal per currency confirming that debits equal credits. Never mix currencies in a total.",
+      "description": "Standard trial balance for month-end.",
+      "report_usage": "Month-end close"
+    }
+  },
+  {
+    "number": "RITM0040020",
+    "name": "Database Report Request - GL Balance Summary by Account Class",
+    "variables": {
+      "output_fields": "Legal Entity, Currency, Account Class, Total Debits, Total Credits, Net (Debit minus Credit)",
+      "report_criteria": "Roll up posted journal legs into ASSET, LIABILITY, EQUITY, INCOME and EXPENSE per legal entity and currency, for business dates from 2026-09-01 to 2026-09-30 inclusive.",
+      "description": "Finance wants the trial balance summarised by account class.",
+      "report_usage": "Management accounts"
+    }
+  },
+  {
+    "number": "RITM0040021",
+    "name": "Database Report Request - GL Hierarchy Rollup",
+    "variables": {
+      "output_fields": "GL Code, GL Name, Level, Parent GL Code, Own Balance, Rolled-Up Balance, Currency",
+      "report_criteria": "Show the full chart of accounts as a tree per legal entity and currency, with each parent's rolled-up balance including all descendants (debit minus credit, posted entries only). Include accounts that have no postings.",
+      "description": "Financial reporting needs subtotals at every level of the chart of accounts.",
+      "report_usage": "Financial statements preparation"
+    }
+  },
+  {
+    "number": "RITM0040022",
+    "name": "Database Report Request - Journal Integrity Exceptions",
+    "variables": {
+      "output_fields": "Legal Entity, Journal Reference, Exception Type, Business Date, Currency, Detail",
+      "report_criteria": "One combined list of these exceptions: DRAFT journals older than 2 days, POSTED journals whose debits do not equal credits, journals whose business date falls outside their accounting period, and journals with fewer than two legs.",
+      "description": "Controllers want a single exceptions worklist instead of four separate checks.",
+      "report_usage": "Daily controllership check"
+    }
+  },
+  {
+    "number": "RITM0040023",
+    "name": "Database Report Request - Journal Reversal Analysis",
+    "variables": {
+      "output_fields": "Original Journal Reference, Reversal Journal Reference, Original Business Date, Reversal Business Date, Currency, GL Code, Original Net Amount, Reversal Net Amount, Residual",
+      "report_criteria": "For every journal that has been reversed, compare the net amount per GL account between the original and its reversal, and show any residual that is not zero.",
+      "description": "Audit sample testing that reversals fully negate the original posting.",
+      "report_usage": "Internal audit"
+    }
+  },
+  {
+    "number": "RITM0040024",
+    "name": "Database Report Request - Payment Volume by Rail",
+    "variables": {
+      "output_fields": "Legal Entity, Currency, Payment Rail, Status, Payment Count, Total Amount",
+      "report_criteria": "Payments received in the current month, grouped by payment rail, status and currency. Currencies must not be added together.",
+      "description": "Payment operations wants monthly volumes per payment network.",
+      "report_usage": "Monthly SSRS report for Payment Operations"
+    }
+  },
+  {
+    "number": "RITM0040025",
+    "name": "Database Report Request - Payment Volume by Channel",
+    "variables": {
+      "output_fields": "Legal Entity, Currency, Channel, Status, Payment Count, Total Amount, Average Amount",
+      "report_criteria": "Payments received in the current month, grouped by originating channel, status and currency. No cross-currency totals.",
+      "description": "The digital team wants the same view as the payment rail report, but by channel.",
+      "report_usage": "Digital channel review"
+    }
+  },
+  {
+    "number": "RITM0040026",
+    "name": "Database Report Request - Partially Settled and Returned Payments",
+    "variables": {
+      "output_fields": "Payment Reference, Currency, Payment Amount, Total Settled, Total Returned, Net Settled, Settlement Count, Return Count",
+      "report_criteria": "Payments in SUBMITTED or SETTLED status where total settled is less than the payment amount, or where any return exists. Settlements and returns must be totalled separately so amounts are not multiplied.",
+      "description": "Settlement operations needs to see payments where money received and money returned do not tell a simple story.",
+      "report_usage": "Settlement exception review"
+    }
+  },
+  {
+    "number": "RITM0040027",
+    "name": "Database Report Request - Failed Payments",
+    "variables": {
+      "output_fields": "Payment Reference, Amount, Currency, Status, Failure Reason, Failed Attempt Count, Last Attempt Status",
+      "report_criteria": "Failed payments for last month.",
+      "description": "Operations leadership wants to see payment failures.",
+      "report_usage": "Weekly operations meeting"
+    }
+  },
+  {
+    "number": "RITM0040028",
+    "name": "Database Report Request - Payment Exception Queue",
+    "variables": {
+      "output_fields": "Exception Category, Reference, Legal Entity, Currency, Amount, Age in Hours, Detail",
+      "report_criteria": "One combined list of: REJECTED or CANCELLED payments in the last 7 days, payments still in RECEIVED or VALIDATING for more than 24 hours, network attempts in RETRY status whose next retry time is due, and reconciliation items that are not MATCHED.",
+      "description": "Operations wants a single morning queue covering all payment problem types.",
+      "report_usage": "Operations morning queue"
+    }
+  },
+  {
+    "number": "RITM0040029",
+    "name": "Database Report Request - Payment Lifecycle Timings",
+    "variables": {
+      "output_fields": "Payment Rail, Payment Type, Payment Count, Avg Minutes Between Events, Avg Minutes Received to Completed, Max Minutes Received to Completed, Avg Events Per Payment",
+      "report_criteria": "For payments that have a completed timestamp, measure elapsed time between consecutive status events in the payment event timeline and from receipt to completion, summarised per payment rail and payment type.",
+      "description": "Service level monitoring of how long payments take to move through their states.",
+      "report_usage": "Monthly SLA report"
+    }
+  },
+  {
+    "number": "RITM0040030",
+    "name": "Database Report Request - Payment Fees Assessed",
+    "variables": {
+      "output_fields": "Payment Reference, Fee Code, Fee Name, Fee Currency, Payment Currency, Fee Amount, Tax Amount, Waived Amount, Net Fee Charged, Booked To Journal",
+      "report_criteria": "Fees assessed on payments received in the current quarter. Net fee charged is fee minus waived plus tax. Flag rows where the fee currency differs from the payment currency, and show whether the fee has been booked to a journal.",
+      "description": "Finance reconciles fee income against payments.",
+      "report_usage": "Fee income reconciliation"
+    }
+  },
+  {
+    "number": "RITM0040031",
+    "name": "Database Report Request - FX Deal Rate Deviation",
+    "variables": {
+      "output_fields": "Payment Reference, Deal Reference, Source Currency, Target Currency, Agreed Rate, Market Rate, Deviation Percent, Source Amount, Target Amount",
+      "report_criteria": "Cross-currency payments where the agreed rate differs from the linked market rate by more than 0.5%, plus deals where the target amount does not equal source amount multiplied by agreed rate (rounded to 2 decimals).",
+      "description": "Treasury wants to detect off-market FX pricing and arithmetic errors.",
+      "report_usage": "Treasury FX control"
+    }
+  },
+  {
+    "number": "RITM0040032",
+    "name": "Database Report Request - Upcoming Standing Orders and Expiring Mandates",
+    "variables": {
+      "output_fields": "Item Type, Reference, Account Number, Counterparty, Amount, Due Date, Status",
+      "report_criteria": "Standing orders with a next execution date in the next 14 days and direct debit mandates expiring in the next 30 days, in one combined list sorted by date.",
+      "description": "Payment operations plans upcoming recurring payment activity and mandate renewals.",
+      "report_usage": "Weekly payment operations planning"
+    }
+  },
+  {
+    "number": "RITM0040033",
+    "name": "Database Report Request - Overdue Installments with Ageing",
+    "variables": {
+      "output_fields": "Loan Number, Primary Borrower, Currency, Installment Number, Due Date, Days Past Due, Ageing Bucket, Principal Outstanding, Interest Outstanding, Fee Outstanding, Total Outstanding",
+      "report_criteria": "Current-schedule installments that are past due as of the reporting date 2026-12-31 and still have an amount outstanding. Ageing buckets: 1-30, 31-60, 61-90, over 90 days. Primary borrower means the current PRIMARY borrower.",
+      "description": "Credit risk reviews overdue instalments by age.",
+      "report_usage": "Monthly SSRS report for Credit Risk"
+    }
+  },
+  {
+    "number": "RITM0040034",
+    "name": "Database Report Request - Delinquent Loans",
+    "variables": {
+      "output_fields": "Loan Number, Borrower Name, Currency, Total Overdue Amount, Oldest Due Date, Number of Overdue Installments",
+      "report_criteria": "Loans that have unpaid installments with a due date before 2026-12-31.",
+      "description": "Collections wants a loan-level list of delinquent loans.",
+      "report_usage": "Collections daily list"
+    }
+  },
+  {
+    "number": "RITM0040035",
+    "name": "Database Report Request - Loan Portfolio with Collateral Coverage",
+    "variables": {
+      "output_fields": "Loan Number, Risk Grade, Impairment Stage, Currency, Outstanding Principal, Secured Amount, Collateral Appraised Value, Coverage Ratio, Uncovered Amount",
+      "report_criteria": "Loans that are not closed or written off. Outstanding principal must come from the posted ledger balance of the loan account. Compare it with current (unreleased) collateral allocations; loans without collateral count as zero coverage. Do not compare amounts across currencies.",
+      "description": "The credit committee needs to see how well the loan book is secured.",
+      "report_usage": "Quarterly credit committee pack"
+    }
+  },
+  {
+    "number": "RITM0040036",
+    "name": "Database Report Request - Collateral Owned by Non-Borrowers",
+    "variables": {
+      "output_fields": "Loan Number, Collateral Reference, Collateral Type, Collateral Owner, Primary Borrower, Secured Amount, Lien Rank, Pledged On",
+      "report_criteria": "Current collateral pledges where the collateral owner is not one of the loan's current borrowers, co-borrowers or guarantors.",
+      "description": "Legal documentation must verify third-party pledges.",
+      "report_usage": "Legal documentation check"
+    }
+  },
+  {
+    "number": "RITM0040037",
+    "name": "Database Report Request - Loan Repayment Reversals",
+    "variables": {
+      "output_fields": "Loan Number, Installment Number, Original Allocation Reference, Reversal Allocation Reference, Principal Paid, Interest Paid, Fee Paid, Net Principal, Net Interest, Net Fee, Reversal Date",
+      "report_criteria": "Repayment allocations that have been reversed, showing the original and its reversal side by side, and the net paid amounts per installment after reversals.",
+      "description": "Credit operations audits repayment reversals.",
+      "report_usage": "Credit operations audit"
+    }
+  },
+  {
+    "number": "RITM0040038",
+    "name": "Database Report Request - Card Clearing and Authorization Mismatch",
+    "variables": {
+      "output_fields": "Network Reference, Card Last Four, Merchant Name, Currency, Authorized Amount, Cleared Amount, Difference, Mismatch Type",
+      "report_criteria": "One combined list of: clearing transactions with no matching authorization, authorizations with no clearing that have already expired, and authorizations where the total cleared amount exceeds the approved amount.",
+      "description": "Card operations reconciles authorizations against clearing files.",
+      "report_usage": "Card operations reconciliation"
+    }
+  },
+  {
+    "number": "RITM0040039",
+    "name": "Database Report Request - Currency Exposure Across Domains",
+    "variables": {
+      "output_fields": "Currency, Domain, Record Count, Total Amount",
+      "report_criteria": "For each currency show one row per domain: deposit balances (posted), loan principal outstanding, payments received this month, card authorizations approved and not yet expired, and active account holds. Never add different currencies together.",
+      "description": "Treasury wants a single view of activity and balances per currency.",
+      "report_usage": "Treasury liquidity view"
+    }
+  },
+  {
+    "number": "RITM0040040",
+    "name": "Database Report Request - Country Risk Exposure",
+    "variables": {
+      "output_fields": "Country Code, Country Name, Risk Band, Exposure Area, Record Count",
+      "report_criteria": "For countries rated MEDIUM or HIGH risk, count the records related to each country in every area: customers resident there, customers with tax residency there, persons with that nationality, organizations registered there, beneficiaries, payment creditor country, card merchants and external banks.",
+      "description": "Financial crime risk wants to see exposure by country across the whole bank.",
+      "report_usage": "Financial crime risk assessment"
+    }
+  },
+  {
+    "number": "RITM0040041",
+    "name": "Database Report Request - Reference Lookup Across Systems",
+    "variables": {
+      "output_fields": "Reference Type, Reference Value, Record Type, Record Id, Status, Currency, Amount, Created At",
+      "report_criteria": "Find every record that carries a reference containing the text 'DEMO': payment references, end-to-end IDs and network references on payments, card authorization and card transaction network references, account external references, customer external references and reconciliation external references.",
+      "description": "Support staff need one search that finds a reference wherever it appears.",
+      "report_usage": "Support investigation tool"
+    }
+  },
+  {
+    "number": "RITM0040042",
+    "name": "Database Report Request - Effective-Dated Records Currently In Force",
+    "variables": {
+      "output_fields": "Record Type, Record Id, Owner Reference, Valid From, Valid To, Days Until Expiry",
+      "report_criteria": "All effective-dated records in force today: addresses, contacts, account parties, customer relationships, customer segment memberships, tax residencies, product interest rates, product fees and account interest rates. End date is exclusive and blank means open-ended. Highlight those that end within 90 days.",
+      "description": "Data governance wants an inventory of time-bounded records across the data model.",
+      "report_usage": "Data governance review"
+    }
+  },
+  {
+    "number": "RITM0040043",
+    "name": "Database Report Request - Employee Workload Overview",
+    "variables": {
+      "output_fields": "Employee Number, Employee Name, Branch, Customers Managed, Accounts Serviced, Loans Serviced, Reconciliation Cases Assigned, Approval Requests Raised, Approval Decisions Made",
       "report_criteria": "",
-      "summary": "Platform Engineering wants a monthly SSRS overview of merchant webhook subscriptions but hasn't specified which configs should be included."
+      "description": "Management wants to see how work is spread across employees.",
+      "report_usage": "something"
     }
   },
   {
-    "number": "RITM0030014",
-    "name": "Database Report Request - Stuck Outbox Events",
+    "number": "RITM0040044",
+    "name": "Database Report Request - Approval Requests and Proposed Changes",
     "variables": {
-      "output_fields": "Event ID, Aggregate Type, Aggregate ID, Event Type, Status, Attempts, Last Error",
-      "report_criteria": "Outbox events that have been stuck for a while and are failing repeatedly.",
-      "summary": "Platform Engineering wants an ECG feed of outbox events that seem stuck, but the exact staleness threshold and how often to refresh the report haven't been defined yet."
+      "output_fields": "Request Reference, Entity Type, Entity Key, Action, Maker, Checkers, Required Approvals, Approvals Received, Rejections, Status, Proposed Field Name, Proposed Value",
+      "report_criteria": "All approval requests raised in the last 90 days, with the proposed-change JSON flattened into one row per field name and value. Show approvals and rejections received, and flag requests where a checker is the same person as the maker or where fewer approvals than required have been received.",
+      "description": "Internal control review of the maker-checker process.",
+      "report_usage": "Internal control review"
     }
   },
   {
-    "number": "RITM0030015",
-    "name": "Database Report Request - Card Vault Compliance Snapshot",
+    "number": "RITM0040045",
+    "name": "Database Report Request - Outbox Backlog",
     "variables": {
-      "output_fields": "Card ID, Card Details, Brand, Card Holder Name",
-      "report_criteria": "Provide real-time visibility into all vault card details, refreshed only once a quarter.",
-      "summary": "Compliance wants an SSRS view of vault card data, but the requested field list is vague and the real-time expectation in the criteria conflicts with the quarterly refresh cadence."
+      "output_fields": "Aggregate Type, Event Type, Pending Count, Oldest Pending Event, Max Attempts, Latest Error",
+      "report_criteria": "",
+      "description": "Platform Engineering wants to see whether event publishing is backed up.",
+      "report_usage": "Monthly platform health report"
     }
   },
   {
-    "number": "RITM0030016",
-    "name": "Database Report Request - Recent Settlement Batches",
+    "number": "RITM0040046",
+    "name": "Database Report Request - Reconciliation Exceptions",
     "variables": {
-      "output_fields": "Settlement ID, Merchant ID, Net Amount, Status, Processed At",
-      "report_criteria": "Settlements processed recently, in a Processed status.",
-      "summary": "Finance wants a daily ECG feed of recently processed settlements, delivered each day, but hasn't said what time of day it should run."
+      "output_fields": "Case Reference, Business Date, Currency, Assigned To, Item Reference, External Amount, Internal Amount, Difference, Exception Type",
+      "report_criteria": "Reconciliation items that are not MATCHED or have a non-zero difference, in cases that are not CLOSED; plus settled payments whose settlement date and currency fall in an existing reconciliation case but which have no reconciliation item. Internal amount is the total settled for the matched payment.",
+      "description": "The reconciliation team works both sides: bank items without a payment, and payments without a bank item.",
+      "report_usage": "Reconciliation team worklist"
     }
   },
-    {
-    "number": "RITM0030017",
-    "name": "Database Report Request - Order Status Snapshot for Q1",
+  {
+    "number": "RITM0040047",
+    "name": "Database Report Request - Daily Close Readiness",
     "variables": {
-      "output_fields": "Order ID, Merchant ID, Amount, Notes, Attempts, Created At",
-      "report_criteria": "Orders with a status of Paid or Cancelled, created between 2026-01-01 and 2026-03-31.",
-      "summary": "Finance wants a one-time Excel export of paid and cancelled orders from Q1 2026 for quarter-close reconciliation."
+      "output_fields": "Legal Entity, Business Date, Business Day Status, Draft Journals, Unfinished Payments, Unsubmitted Batches, Open Reconciliation Cases, Ready To Close",
+      "report_criteria": "For each legal entity and each business day not yet CLOSED, count the blockers: draft journals on that business date, payments received that day not yet in a final status (SETTLED, REJECTED, CANCELLED, RETURNED), payment batches for that date not submitted, and reconciliation cases for that date not CLOSED. Ready To Close is yes only when all counts are zero.",
+      "description": "Operations wants to know what blocks the end-of-day close.",
+      "report_usage": "End-of-day operations checklist"
+    }
+  },
+  {
+    "number": "RITM0040048",
+    "name": "Database Report Request - Recently Changed Master Data",
+    "variables": {
+      "output_fields": "Table Name, Record Id, Record Description, Created At, Created By, Last Updated At, Last Updated By, Change Type",
+      "report_criteria": "Customers, accounts, products, beneficiaries, branches and employees created or updated in the last 30 days. Change Type is NEW if never updated, otherwise MODIFIED. Newest first.",
+      "description": "Audit wants a single change feed across the main master data tables.",
+      "report_usage": "Monthly audit review"
+    }
+  },
+  {
+    "number": "RITM0040049",
+    "name": "Database Report Request - Reason Code Usage",
+    "variables": {
+      "output_fields": "Domain Code, Reason Code, Description, Used In, Usage Count, Is Active",
+      "report_criteria": "Every reason code with the number of times it is used in each place: account closures, account restrictions, payment failures, payment events and payment returns. Reason codes that are never used must still appear.",
+      "description": "Reference data owners want to retire unused reason codes safely.",
+      "report_usage": "Reference data cleanup"
+    }
+  },
+  {
+    "number": "RITM0040050",
+    "name": "Database Report Request - Channel Usage Summary",
+    "variables": {
+      "output_fields": "Channel Code, Channel Name, Is Digital, Usage Area, Record Count",
+      "report_criteria": "",
+      "description": "Digital strategy wants to see which channels are actually used.",
+      "report_usage": "something"
     }
   }
 ]

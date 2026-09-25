@@ -6,7 +6,8 @@ class ReportVariables(BaseModel):
 
     output_fields: str
     report_criteria: str
-    summary: str
+    description: str
+    report_usage: str
 
 
 class Ritm(BaseModel):

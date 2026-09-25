@@ -13,6 +13,9 @@ settings = get_settings()
 
 _TRUNCATE = "TRUNCATE TABLE schema_relationships, schema_columns, schema_tables RESTART IDENTITY"
 
+# create_all never alters an existing table, so a catalog built before allowed_values existed gets it here.
+_ADD_ALLOWED_VALUES = "ALTER TABLE schema_columns ADD COLUMN IF NOT EXISTS allowed_values JSONB"
+
 _TSV_UPDATE = """
 UPDATE schema_tables
 SET tsv = setweight(to_tsvector('english', :name_text), 'A')
@@ -76,6 +79,7 @@ def sync_catalog(source_db: Session, catalog_db: Session) -> SyncResult:
     doc_texts = [build_doc_text(t) for t in introspection.tables]
     embeddings = embed(doc_texts, "document")
 
+    catalog_db.execute(text(_ADD_ALLOWED_VALUES))
     catalog_db.execute(text(_TRUNCATE))
 
     now = datetime.now(UTC)
@@ -105,6 +109,7 @@ def sync_catalog(source_db: Session, catalog_db: Session) -> SyncResult:
                     is_foreign_key=col.is_foreign_key,
                     ordinal_position=col.ordinal_position,
                     description=col.description,
+                    allowed_values=col.allowed_values,
                 )
             )
 

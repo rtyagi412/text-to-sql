@@ -45,6 +45,18 @@ def _parse(sql: str) -> exp.Select:
     return tree
 
 
+def _canonical_table_names(tree: exp.Select, columns: dict[str, dict[str, str]]) -> None:
+    """Rewrites each table reference to the catalog's spelling. SQL Server compares object names without regard to
+    case by default, so [core].[account] is the same table as core.Account; the formatted SQL then uses one spelling."""
+    canonical = {key.lower(): key for key in columns}
+    for table in tree.find_all(exp.Table):
+        key = canonical.get(f"{table.db}.{table.name}".lower()) if table.db else None
+        if key:
+            schema_name, table_name = key.split(".", 1)
+            table.this.set("this", table_name)
+            table.args["db"].set("this", schema_name)
+
+
 def _tables(tree: exp.Select) -> list[str]:
     keys: list[str] = []
     for table in tree.find_all(exp.Table):
@@ -103,6 +115,7 @@ def check_sql(sql: str, columns: dict[str, dict[str, str]]) -> CheckedSql:
     for every table the SQL may use. Rejects SQL that isn't one plain SELECT, reads a table or column that is not
     in `columns`, or would need a guess to resolve (an ambiguous column)."""
     tree = _parse(sql)
+    _canonical_table_names(tree, columns)
     tables = _tables(tree)
     for key in tables:
         if key not in columns:

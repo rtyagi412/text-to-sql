@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -48,6 +50,14 @@ JOIN sys.tables t ON c.object_id = t.object_id
 JOIN sys.schemas s ON t.schema_id = s.schema_id
 JOIN sys.extended_properties ep
     ON ep.major_id = c.object_id AND ep.minor_id = c.column_id AND ep.name = 'MS_Description'
+"""
+
+# CHECK constraints: for an enum-like column (status, method, ...) the definition lists every value it can hold
+_CHECK_CONSTRAINTS_QUERY = """
+SELECT s.name AS schema_name, t.name AS table_name, cc.definition
+FROM sys.check_constraints cc
+JOIN sys.tables t ON cc.parent_object_id = t.object_id
+JOIN sys.schemas s ON t.schema_id = s.schema_id
 """
 
 # Which column(s) uniquely identify each row in each table
@@ -110,6 +120,23 @@ def _format_data_type(type_name: str, max_length: int, precision: int, scale: in
     return type_name
 
 
+_EQUALS_LITERAL = re.compile(r"\[(\w+)\]\s*=\s*N?'((?:[^']|'')*)'")
+_IS_NULL = re.compile(r"\[\w+\]\s+IS\s+NULL", re.IGNORECASE)
+
+
+def parse_enum_check(definition: str) -> tuple[str, list[str]] | None:
+    """(column, allowed values) when a CHECK definition is nothing but `[col]='A' OR [col]='B' ...` on one column,
+    optionally also allowing NULL. SQL Server rewrites IN (...) into this OR chain. Anything else -- ranges, JSON
+    checks, conditions across columns -- is not an enumeration and returns None."""
+    matches = _EQUALS_LITERAL.findall(definition)
+    if not matches or len({column.lower() for column, _ in matches}) != 1:
+        return None
+    rest = _IS_NULL.sub("", _EQUALS_LITERAL.sub("", definition))
+    if re.sub(r"\bOR\b|[()\s]", "", rest, flags=re.IGNORECASE):
+        return None
+    return matches[0][0], sorted({value.replace("''", "'") for _, value in matches})
+
+
 # Example IntrospectionResult JSON:
 # {
 #   "tables": [
@@ -161,6 +188,11 @@ def introspect_schema(db: Session) -> IntrospectionResult:
         (row["schema_name"], row["table_name"], row["column_name"])
         for row in db.execute(text(_PRIMARY_KEYS_QUERY)).mappings().all()
     }
+    allowed_values: dict[tuple[str, str, str], list[str]] = {}  # enum-like column -> the values its CHECK allows
+    for row in db.execute(text(_CHECK_CONSTRAINTS_QUERY)).mappings().all():
+        parsed = parse_enum_check(row["definition"])
+        if parsed is not None:
+            allowed_values[(row["schema_name"], row["table_name"], parsed[0])] = parsed[1]
     fk_rows = db.execute(text(_FOREIGN_KEYS_QUERY)).mappings().all()  # every table-to-table link
     foreign_key_columns = {(row["fk_schema"], row["fk_table"], row["fk_column"]) for row in fk_rows}  # set of columns that point to another table
 
@@ -188,6 +220,7 @@ def introspect_schema(db: Session) -> IntrospectionResult:
                 is_foreign_key=column_key in foreign_key_columns,
                 ordinal_position=row["ordinal_position"],
                 description=column_descriptions.get(column_key),
+                allowed_values=allowed_values.get(column_key),
             )
         )
 

@@ -11,6 +11,9 @@ class ColumnMetadata(BaseModel):
     is_foreign_key: bool
     ordinal_position: int
     description: str | None = None
+    allowed_values: list[str] | None = Field(
+        default=None, description="Every value a CHECK constraint lets this column hold; null when it isn't an enumeration."
+    )
 
 
 class TableMetadata(BaseModel):

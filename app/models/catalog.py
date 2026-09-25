@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from app.core.config import get_settings
@@ -51,6 +51,7 @@ class SchemaColumn(Base):
     is_foreign_key: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     ordinal_position: Mapped[int] = mapped_column(Integer, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    allowed_values: Mapped[list[str] | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
 
     table: Mapped["SchemaTable"] = relationship(back_populates="columns")
 
