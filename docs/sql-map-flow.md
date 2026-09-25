@@ -57,15 +57,17 @@ sequenceDiagram
 5. **Assemble the response** (end of `map_columns`). `status` is derived (`NEEDS_CLARIFICATION` if there are clarifications, else `READY`);
    `matched_ritms` shows what the mapping drew on; `audit` records prompt version, model, token usage, calls made.
 
-## Two retry mechanisms (max 4 model calls)
+## Three retry mechanisms (max 4 model answers)
 
 | Loop | Where | What triggers it | Limit |
 |---|---|---|---|
 | Correction | `common.generate_checked` | Reply unusable (empty, cut off, not JSON) **or** rejected by step 4 | 1 retry, with the reasons sent back |
 | More tables | `mapping._ask_model` | Answer has `tables_needed`: the slice lacked a table | 1 extra round; the tables are added and the model is asked again. A second request is refused |
+| HTTP | `llm_service._post` | The API itself failed: timeout, connection error, 429 or 5xx (a 401/402/400 is not retried) | `LLM_MAX_RETRIES` more requests (default 2), pausing 1s, 2s, 4s... |
 
-So the worst case is 2 rounds × 2 attempts = **4 LLM calls**. A failure on the last attempt surfaces as a 502
-(`routes/sql.py::_http_errors`).
+So the worst case is 2 rounds × 2 attempts = **4 model answers**. The `attempts` in the audit counts these. Each answer
+can itself take up to `LLM_MAX_RETRIES + 1` HTTP requests (3 by default), so a badly failing run can make up to 12
+requests. A failure on the last attempt surfaces as a 502 (`routes/sql.py::_http_errors`).
 
 ## Where things live
 

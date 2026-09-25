@@ -1,5 +1,4 @@
 import json
-import logging
 import re
 import time
 from dataclasses import dataclass, replace
@@ -11,7 +10,6 @@ from app.core.config import get_settings
 from app.schemas.sql_generation import TokenUsage
 
 settings = get_settings()
-logger = logging.getLogger(__name__)
 
 _CHAT_PATH = "/chat/completions"
 # Overload and rate limiting are worth another attempt; a bad key (401), no balance (402) or a bad request are not.
@@ -108,6 +106,10 @@ def _error_text(response: httpx2.Response) -> str:
 
 
 def _post(body: dict) -> dict:
+    """Sends one chat request, retrying when the API itself is the problem: a timeout or connection failure, or a
+    429 / 5xx, up to `llm_max_retries` more times with a growing pause. This is separate from the retry in
+    `generate_checked`, which asks again when the model's *answer* is unusable, so one answer costs up to
+    `llm_max_retries + 1` HTTP requests and a request that needs a correction costs that twice over."""
     for attempt in range(settings.llm_max_retries + 1):
         last = attempt == settings.llm_max_retries
         try:
@@ -157,6 +159,20 @@ def generate_json(
         raise LlmConfigError("DEEPSEEK_API_KEY is not set; it is required for the extract, map and write stages")
     model = model or settings.llm_model
 
+    payload = _post(_build_request(model, system, user_content, schema, prior_answer, feedback))
+    content = _answer_text(payload)
+    return LlmJsonResult(
+        data=_parse_json(content),
+        raw=content,
+        model=payload.get("model") or model,
+        usage=_usage_from(payload),
+        request_id=payload.get("id"),
+    )
+
+
+def _build_request(
+    model: str, system: str, user_content: str, schema: dict, prior_answer: str | None, feedback: str | None
+) -> dict:
     messages = [
         {"role": "system", "content": f"{system}\n\n{_format_instructions(schema)}"},
         {"role": "user", "content": user_content},
@@ -180,8 +196,12 @@ def generate_json(
             body["reasoning_effort"] = settings.llm_reasoning_effort
     else:
         body["temperature"] = settings.llm_temperature
+    return body
 
-    payload = _post(body)
+
+def _answer_text(payload: dict) -> str:
+    """The text of the model's answer, or the error for a response that cannot hold one: filtered by the provider,
+    cut off, interrupted or empty. An unusable answer carries its text (`raw`) so it can be sent back."""
     choice = (payload.get("choices") or [{}])[0]
     finish = choice.get("finish_reason")
     content = (choice.get("message") or {}).get("content") or ""
@@ -198,19 +218,16 @@ def generate_json(
     if not content.strip():
         # JSON mode can occasionally return nothing (the provider documents it), so this is retried, not fatal.
         raise LlmOutputError("Response was empty")
-    data = _parse_json(content)
+    return content
 
+
+def _usage_from(payload: dict) -> TokenUsage:
+    """Token counts, with the cached part of the prompt reported apart from the part that was computed fresh."""
     usage = payload.get("usage") or {}
     hit = usage.get("prompt_cache_hit_tokens") or 0
     miss = usage.get("prompt_cache_miss_tokens")
-    return LlmJsonResult(
-        data=data,
-        raw=content,
-        model=payload.get("model") or model,
-        usage=TokenUsage(
-            input_tokens=miss if miss is not None else max((usage.get("prompt_tokens") or 0) - hit, 0),
-            output_tokens=usage.get("completion_tokens") or 0,
-            cache_read_input_tokens=hit,
-        ),
-        request_id=payload.get("id"),
+    return TokenUsage(
+        input_tokens=miss if miss is not None else max((usage.get("prompt_tokens") or 0) - hit, 0),
+        output_tokens=usage.get("completion_tokens") or 0,
+        cache_read_input_tokens=hit,
     )
