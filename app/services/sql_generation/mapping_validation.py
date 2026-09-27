@@ -27,10 +27,12 @@ def validate_mapping(
 
 
 def _check_columns_exist(mapping: ColumnMapping, schema: SchemaContext) -> list[str]:
-    """Every table and column the mapping names is one the model was shown."""
+    """Every table and column the mapping names is one the model was shown, including the columns a derived
+    field is computed from."""
     picks = [
-        *((f"field '{m.requested}'", m.table, m.column) for m in mapping.output_fields),
+        *((f"field '{m.requested}'", ref.table, ref.column) for m in mapping.output_fields for ref in m.column_refs),
         *((f"filter '{m.requested}'", m.table, m.column) for m in mapping.filters),
+        *((f"filter '{m.requested}' (other column)", m.value_column.table, m.value_column.column) for m in mapping.filters if m.value_column),
         *((f"additional filter on {a.table}.{a.column}", a.table, a.column) for a in mapping.additional_filters),
     ]
     problems: list[str] = []

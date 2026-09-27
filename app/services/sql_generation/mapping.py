@@ -15,11 +15,12 @@ from app.schemas.ritm import Ritm
 from app.schemas.sql_generation import ColumnMapping, ColumnMappingAnswer, ColumnMappingRequest, ColumnMappingResponse
 from app.services import schema_context_service
 from app.services.approved_ritm_service import SimilarRitm
-from app.services.llm_service import LlmJsonResult, LlmOutputError
+from app.services.llm_service import LlmJsonResult
 from app.services.ritm_service import get_ritm_by_id
 from app.services.schema_context_service import SchemaContext
 from app.services.sql_generation.common import (
     audit,
+    check_tables_needed,
     generate_checked,
     matched_ritms,
     reference_sections,
@@ -174,13 +175,5 @@ def _parse_answer(
         validate_mapping(answer, request, schema, examples)
         return answer
 
-    shown = set(schema.tables)
-    problems = [
-        *(f"'{t}' is not a table in <table_index>" for t in answer.tables_needed if t not in known_tables),
-        *(f"'{t}' is already shown in <schema>" for t in answer.tables_needed if t in shown),
-    ]
-    if not may_ask:
-        problems.append("the tables you asked for earlier have been added and no more can be requested: map with what is shown, or ask a clarification")
-    if problems:
-        raise LlmOutputError("The request for more tables was rejected: " + "; ".join(problems))
+    check_tables_needed(answer.tables_needed, schema, known_tables, may_ask)
     return answer

@@ -14,11 +14,13 @@ settings = get_settings()
 
 @dataclass
 class RelEdge:
+    """One foreign key constraint. `columns` holds a (fk column, pk column) pair per column of the constraint:
+    several for a composite key, which is one edge and joins on all its pairs."""
+
     constraint_name: str
     fk_table_id: int
-    fk_column: str
     pk_table_id: int
-    pk_column: str
+    columns: list[tuple[str, str]]
 
     def other_side(self, table_id: int) -> int:
         return self.pk_table_id if table_id == self.fk_table_id else self.fk_table_id
@@ -31,26 +33,40 @@ def _load_table_maps(catalog_db: Session) -> tuple[dict[str, int], dict[int, tup
     return name_to_id, id_to_name
 
 
-def _load_adjacency(catalog_db: Session) -> dict[int, list[RelEdge]]:
-    rows = catalog_db.query(
-        SchemaRelationship.constraint_name,
-        SchemaRelationship.fk_table_id,
-        SchemaRelationship.fk_column_name,
-        SchemaRelationship.pk_table_id,
-        SchemaRelationship.pk_column_name,
-    ).all()
+def key_text(table: str, columns: list[str]) -> str:
+    """One side of a foreign key as prompt text: `schema.table.Col`, or `schema.table(ColA, ColB)` for a composite key."""
+    return f"{table}.{columns[0]}" if len(columns) == 1 else f"{table}({', '.join(columns)})"
 
-    adjacency: dict[int, list[RelEdge]] = {}
-    for constraint_name, fk_table_id, fk_column, pk_table_id, pk_column in rows:
-        edge = RelEdge(
-            constraint_name=constraint_name,
-            fk_table_id=fk_table_id,
-            fk_column=fk_column,
-            pk_table_id=pk_table_id,
-            pk_column=pk_column,
+
+def load_edges(catalog_db: Session) -> list[RelEdge]:
+    """The catalog stores one row per column of a foreign key; the columns of one constraint are gathered back
+    into one edge, so a composite key is not mistaken for several parallel (and so ambiguous) paths."""
+    rows = (
+        catalog_db.query(
+            SchemaRelationship.constraint_name,
+            SchemaRelationship.fk_table_id,
+            SchemaRelationship.fk_column_name,
+            SchemaRelationship.pk_table_id,
+            SchemaRelationship.pk_column_name,
         )
-        adjacency.setdefault(fk_table_id, []).append(edge)
-        adjacency.setdefault(pk_table_id, []).append(edge)
+        .order_by(SchemaRelationship.id)
+        .all()
+    )
+    edges: dict[tuple[str, int], RelEdge] = {}
+    for constraint_name, fk_table_id, fk_column, pk_table_id, pk_column in rows:
+        edge = edges.setdefault(
+            (constraint_name, fk_table_id),
+            RelEdge(constraint_name=constraint_name, fk_table_id=fk_table_id, pk_table_id=pk_table_id, columns=[]),
+        )
+        edge.columns.append((fk_column, pk_column))
+    return list(edges.values())
+
+
+def _load_adjacency(catalog_db: Session) -> dict[int, list[RelEdge]]:
+    adjacency: dict[int, list[RelEdge]] = {}
+    for edge in load_edges(catalog_db):
+        adjacency.setdefault(edge.fk_table_id, []).append(edge)
+        adjacency.setdefault(edge.pk_table_id, []).append(edge)
     return adjacency
 
 
@@ -111,10 +127,10 @@ def _to_join_edge(edge: RelEdge, id_to_name: dict[int, tuple[str, str]]) -> Join
     return JoinEdge(
         from_schema=fk_schema,
         from_table=fk_table,
-        from_column=edge.fk_column,
+        from_columns=[fk for fk, _ in edge.columns],
         to_schema=pk_schema,
         to_table=pk_table,
-        to_column=edge.pk_column,
+        to_columns=[pk for _, pk in edge.columns],
         constraint_name=edge.constraint_name,
     )
 

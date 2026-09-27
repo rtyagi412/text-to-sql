@@ -101,7 +101,7 @@ def resolve_version(prompt_version: str | None, default: str, stage: str) -> Pro
 def similar_examples(
     output_fields: str, report_criteria: str, exclude_number: str, catalog_db: Session
 ) -> list[SimilarRitm]:
-    similar = approved_ritm_service.find_similar(output_fields, report_criteria, exclude_number)
+    similar = approved_ritm_service.find_similar(catalog_db, output_fields, report_criteria, exclude_number)
     # An approved solution that references a table the catalog no longer has is stale: showing it would
     # teach the model a schema that doesn't exist.
     existing = schema_context_service.existing_table_keys(catalog_db)
@@ -150,6 +150,23 @@ def generate_checked(
             logger.info("answer rejected, asking for a correction: %s", exc)
             prior, feedback = result.raw, str(exc)
     raise AssertionError("unreachable: the second attempt returns or raises")
+
+
+def check_tables_needed(tables_needed: list[str], schema: SchemaContext, known_tables: set[str], may_ask: bool) -> None:
+    """A model's request to see more tables (the mapping and write stages allow one) is only checked: every table
+    must exist in <table_index>, must not already be shown, and a second request is refused. Raises LlmOutputError
+    with the reasons, which sends the reply back for a correction."""
+    shown = set(schema.tables)
+    problems = [
+        *(f"'{t}' is not a table in <table_index>" for t in tables_needed if t not in known_tables),
+        *(f"'{t}' is already shown in <schema>" for t in tables_needed if t in shown),
+    ]
+    if not may_ask:
+        problems.append(
+            "the tables you asked for earlier have been added and no more can be requested: work with what is shown, or ask a clarification"
+        )
+    if problems:
+        raise LlmOutputError("The request for more tables was rejected: " + "; ".join(problems))
 
 
 def audit(
@@ -207,5 +224,9 @@ def filter_problems(label: str, item: MappedFilter | AdditionalFilter, context: 
     data_type = context.columns.get(item.table, {}).get(item.column)
     if data_type is None:
         return []
+    other = item.value_column if isinstance(item, MappedFilter) else None
+    if other is not None:
+        other_type = context.columns.get(other.table, {}).get(other.column)
+        return [] if other_type is None else filter_check_service.check_column_comparison(label, data_type, other_type)
     allowed = context.allowed_values.get(item.table, {}).get(item.column)
     return filter_check_service.check_filter(label, item.operator, item.value, data_type, allowed)

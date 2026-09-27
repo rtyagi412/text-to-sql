@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.catalog import SchemaColumn, SchemaRelationship, SchemaTable
+from app.services import join_service
 from app.services.retrieval_service import search_tables
 
 settings = get_settings()
@@ -81,8 +82,11 @@ def existing_table_keys(catalog_db: Session) -> set[str]:
 def _select_table_ids(
     catalog_db: Session, queries: list[str], forced_tables: list[str], key_to_id: dict[str, int]
 ) -> list[int]:
-    """Ordered table ids: forced tables first, then tables corroborated by the most queries, then
-    FK neighbours (bridge tables touching several seeds first), all under `schema_max_tables`."""
+    """Ordered table ids under `schema_max_tables`: forced tables first, then tables corroborated by the most
+    queries, then FK neighbours of those (bridge tables touching several seeds first). The last
+    `schema_neighbour_reserve` places are held back for the neighbours, so the tables that reference a hit
+    (the places a "usage count" counts) are not crowded out by lower-ranked search hits; whatever room the
+    neighbours leave goes back to the remaining hits."""
     cap = settings.schema_max_tables
 
     hits: dict[int, int] = {}
@@ -92,20 +96,20 @@ def _select_table_ids(
             hits[result.table_id] = hits.get(result.table_id, 0) + 1
             best[result.table_id] = max(best.get(result.table_id, 0.0), result.hybrid_score)
 
-    chosen: list[int] = []
+    ranked: list[int] = []
     for key in forced_tables:
         table_id = key_to_id.get(key)
-        if table_id is not None and table_id not in chosen:
-            chosen.append(table_id)
+        if table_id is not None and table_id not in ranked:
+            ranked.append(table_id)
+    forced_count = len(ranked)
     for table_id in sorted(hits, key=lambda t: (-hits[t], -best[t])):
-        if table_id not in chosen:
-            chosen.append(table_id)
-    chosen = chosen[:cap]
+        if table_id not in ranked:
+            ranked.append(table_id)
 
-    if len(chosen) < cap:
-        edges = catalog_db.query(SchemaRelationship.fk_table_id, SchemaRelationship.pk_table_id).all()
-        chosen = _expand_with_neighbours(chosen, [(fk, pk) for fk, pk in edges], cap)
-    return chosen
+    seeds = ranked[: max(cap - settings.schema_neighbour_reserve, forced_count)][:cap]
+    edges = catalog_db.query(SchemaRelationship.fk_table_id, SchemaRelationship.pk_table_id).all()
+    chosen = _expand_with_neighbours(seeds, [(fk, pk) for fk, pk in edges], min(len(seeds) + settings.schema_neighbour_reserve, cap))
+    return [*chosen, *(t for t in ranked if t not in chosen)][:cap]
 
 
 def _expand_with_neighbours(seeds: list[int], edges: list[tuple[int, int]], cap: int) -> list[int]:
@@ -190,11 +194,20 @@ def _render_context(catalog_db: Session, by_id: dict[int, SchemaTable], table_id
         blocks.append("\n".join([header, *(_render_column(c) for c in columns_by_table.get(table_id, []))]))
 
     edges = [
-        f"  {keys[rel.fk_table_id]}.{rel.fk_column_name} -> {keys[rel.pk_table_id]}.{rel.pk_column_name}"
-        for rel in catalog_db.query(SchemaRelationship).all()
+        f"  {join_service.key_text(keys[rel.fk_table_id], [fk for fk, _ in rel.columns])} -> "
+        f"{join_service.key_text(keys[rel.pk_table_id], [pk for _, pk in rel.columns])}"
+        for rel in join_service.load_edges(catalog_db)
         if rel.fk_table_id in keys and rel.pk_table_id in keys
     ]
-    blocks.append("\n".join(["RELATIONSHIPS (foreign key -> primary key; the only join keys that are known)", *sorted(edges)]))
+    blocks.append(
+        "\n".join(
+            [
+                "RELATIONSHIPS (foreign key -> primary key; the only join keys that are known; "
+                "a key with several columns is joined on all of them together)",
+                *sorted(edges),
+            ]
+        )
+    )
 
     text = "\n\n".join(blocks)
     return SchemaContext(

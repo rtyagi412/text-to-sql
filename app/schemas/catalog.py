@@ -73,14 +73,17 @@ class SearchResponse(BaseModel):
 
 
 class JoinEdge(BaseModel):
+    """One foreign key. A composite key has several columns; `from_columns[i]` pairs with `to_columns[i]`, and a
+    join must use all the pairs together."""
+
     model_config = ConfigDict(extra="forbid")
 
     from_schema: str
     from_table: str
-    from_column: str
+    from_columns: list[str]
     to_schema: str
     to_table: str
-    to_column: str
+    to_columns: list[str]
     constraint_name: str
 
 

@@ -7,6 +7,9 @@ from sqlglot.optimizer.qualify import qualify
 
 _DIALECT = "tsql"
 
+# Functions that read from another server or a file, beyond the tables the caller named.
+_EXTERNAL_DATA_FUNCTIONS = {"OPENROWSET", "OPENQUERY", "OPENDATASOURCE", "OPENXML"}
+
 _COMPARISONS = (exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE, exp.Between, exp.In, exp.Like)
 _OPERAND_KEYS = ("this", "expression", "low", "high")
 
@@ -38,6 +41,9 @@ def _parse(sql: str) -> exp.Select:
         raise SqlRejectedError("CTEs are not allowed; write one flat SELECT")
     if tree.find(exp.Into):
         raise SqlRejectedError("SELECT ... INTO writes data and is not allowed")
+    for function in tree.find_all(exp.Anonymous):
+        if function.name.upper() in _EXTERNAL_DATA_FUNCTIONS:
+            raise SqlRejectedError(f"{function.name.upper()} reads outside the database and is not allowed")
     for select in tree.find_all(exp.Select):
         for item in select.expressions:
             if isinstance(item, exp.Star) or (isinstance(item, exp.Column) and isinstance(item.this, exp.Star)):
@@ -71,6 +77,35 @@ def _tables(tree: exp.Select) -> list[str]:
 def referenced_tables(sql: str) -> list[str]:
     """The "schema.table" tables the SQL reads. Raises SqlRejectedError when the SQL isn't a plain SELECT."""
     return _tables(_parse(sql))
+
+
+def _output_names(tree: exp.Select) -> list[str]:
+    # Only an alias or a bare column names its output; sqlglot would call COUNT(*) "*", but SQL Server leaves it unnamed.
+    names = [item.alias if isinstance(item, exp.Alias) else item.name if isinstance(item, exp.Column) else "" for item in tree.expressions]
+    for position, name in enumerate(names, start=1):
+        if not name:
+            raise SqlRejectedError(f"output column {position} has no name; give it an alias")
+    duplicates = sorted({n for n in names if [m.lower() for m in names].count(n.lower()) > 1})
+    if duplicates:
+        raise SqlRejectedError(f"output column names must be unique: {', '.join(duplicates)}")
+    return names
+
+
+def output_columns(sql: str) -> list[str]:
+    """The names of the SELECT's output columns, in order: what a report built on it shows. Raises
+    SqlRejectedError when the SQL isn't a plain SELECT, or a column has no name or two share one."""
+    return _output_names(_parse(sql))
+
+
+def query_parameters(sql: str) -> list[str]:
+    """The @parameters the SELECT reads, without the @, in order of first appearance. System variables such as
+    @@ROWCOUNT are not parameters. Raises SqlRejectedError when the SQL isn't a plain SELECT."""
+    found = (
+        p.name
+        for p in _parse(sql).find_all(exp.Parameter)
+        if p.name and not isinstance(p.parent, exp.Parameter)  # @@x parses as a Parameter inside a Parameter
+    )
+    return list(dict.fromkeys(found))
 
 
 def _sargability_warnings(tree: exp.Select) -> list[str]:
@@ -115,6 +150,7 @@ def check_sql(sql: str, columns: dict[str, dict[str, str]]) -> CheckedSql:
     for every table the SQL may use. Rejects SQL that isn't one plain SELECT, reads a table or column that is not
     in `columns`, or would need a guess to resolve (an ambiguous column)."""
     tree = _parse(sql)
+    _output_names(tree)  # every output column named and unique, so the SQL can later back a report
     _canonical_table_names(tree, columns)
     tables = _tables(tree)
     for key in tables:

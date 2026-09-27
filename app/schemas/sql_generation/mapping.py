@@ -3,10 +3,23 @@
 ColumnMapping is the mapping itself. The model answers with ColumnMappingAnswer (a ColumnMapping that may instead ask to
 see more tables first); the requester receives ColumnMappingResponse (a ColumnMapping plus status, matched RITMs and audit)."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.sql_generation.common import Clarification, FilterValue, GenerationAudit, MatchedRitm, Operator, Status
 from app.schemas.sql_generation.extract import RequestedField, RequestedFilter
+
+# The operators that can take a column on the right: the ones that compare one value with one value, and IN / NOT_IN,
+# which test the column against the other column's values across the related rows ("owner is not one of the borrowers").
+COLUMN_COMPARISON_OPERATORS = (
+    Operator.EQUALS,
+    Operator.NOT_EQUALS,
+    Operator.GREATER_THAN,
+    Operator.GREATER_THAN_OR_EQUAL,
+    Operator.LESS_THAN,
+    Operator.LESS_THAN_OR_EQUAL,
+    Operator.IN,
+    Operator.NOT_IN,
+)
 
 
 class ColumnMappingRequest(BaseModel):
@@ -25,14 +38,70 @@ class ColumnMappingRequest(BaseModel):
     )
 
 
+class ColumnRef(BaseModel):
+    """A real column: a table as "schema.table" and a column of it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    table: str = Field(..., description='Catalog table as "schema.table", e.g. "dbo.merchant".')
+    column: str = Field(..., description="Exact column name from the provided schema.")
+
+
+class DerivedValue(BaseModel):
+    """A field no single column stores: a count, total or average, a label saying where a row came from. It is
+    worked out from real columns, which are listed so the SQL step is given every table the value reads."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    definition: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "How the value is computed, in a sentence or two a requester can check: the function (count, sum, ...), "
+            "what it is taken over, the row it belongs to (one row per what) and what shows when nothing matches."
+        ),
+    )
+    sources: list[ColumnRef] = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Every column the value is computed from or counted over, each from <schema>: the foreign key column of "
+            "each table counted (one entry per place counted), the amount column summed, and so on."
+        ),
+    )
+
+
 class MappedField(BaseModel):
-    """A requested field resolved to the real column that carries it."""
+    """A requested field resolved to the real column that carries it, or, when no column stores it, to the value
+    computed from real columns. Exactly one of (table, column) and `derived` is set."""
 
     model_config = ConfigDict(extra="forbid")
 
     requested: str = Field(..., description="The requested field's name, copied exactly from the confirmed request.")
-    table: str = Field(..., description='Catalog table as "schema.table", e.g. "dbo.merchant".')
-    column: str = Field(..., description="Exact column name from the provided schema.")
+    table: str | None = Field(
+        default=None, description='Catalog table as "schema.table", e.g. "dbo.merchant". Null for a derived field.'
+    )
+    column: str | None = Field(default=None, description="Exact column name from the provided schema. Null for a derived field.")
+    derived: DerivedValue | None = Field(
+        default=None,
+        description="Set, with table and column null, when the field is computed rather than stored in one column.",
+    )
+
+    @model_validator(mode="after")
+    def _column_xor_derived(self) -> "MappedField":
+        has_column = self.table is not None or self.column is not None
+        if self.derived is not None and has_column:
+            raise ValueError(f"field '{self.requested}': a derived field has table and column null; put its columns in derived.sources")
+        if self.derived is None and (self.table is None or self.column is None):
+            raise ValueError(f"field '{self.requested}': set table and column, or set derived when no single column carries it")
+        return self
+
+    @property
+    def column_refs(self) -> list[ColumnRef]:
+        """The real columns this field reads."""
+        if self.derived is not None:
+            return list(self.derived.sources)
+        return [ColumnRef(table=self.table, column=self.column)]
 
 
 class MappedFilter(BaseModel):
@@ -49,9 +118,33 @@ class MappedFilter(BaseModel):
         description=(
             "The confirmed value written the way this column stores it (glossary and schema conventions: "
             "UPPER_SNAKE_CASE categories, integer minor units). Null only for IS_NULL / IS_NOT_NULL. Relative "
-            'windows stay "-N UNIT" (UNIT: MINUTES, HOURS, DAYS, WEEKS, MONTHS, YEARS).'
+            'windows stay "-N UNIT" (UNIT: MINUTES, HOURS, DAYS, WEEKS, MONTHS, YEARS). Null too when value_column is set.'
         ),
     )
+    value_column: ColumnRef | None = Field(
+        default=None,
+        description=(
+            "Set, with value null, when the condition compares the column with another column rather than a "
+            "literal (the negotiated rate above the product's rate). The other column, from <schema>."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _value_or_column(self) -> "MappedFilter":
+        if self.value_column is not None:
+            if self.value is not None:
+                raise ValueError(f"filter '{self.requested}': value_column is set, so value must be null")
+            if self.operator not in COLUMN_COMPARISON_OPERATORS:
+                allowed = ", ".join(op.value for op in COLUMN_COMPARISON_OPERATORS)
+                raise ValueError(f"filter '{self.requested}': comparing with another column allows only {allowed}, not {self.operator.value}")
+        return self
+
+    @property
+    def shown_value(self) -> FilterValue | str:
+        """The value as a person would read it: the other column's name when the filter compares two columns."""
+        if self.value_column is not None:
+            return f"{self.value_column.table}.{self.value_column.column}"
+        return self.value
 
 
 class AdditionalFilter(BaseModel):

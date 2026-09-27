@@ -35,6 +35,15 @@ def _values(value: FilterValue) -> list:
     return list(value) if isinstance(value, list) else [value]
 
 
+def check_column_comparison(label: str, left_type: str, right_type: str) -> list[str]:
+    """What is wrong with comparing two columns with each other: their types must be of the same kind (both
+    numeric, both dates, both text, ...). The operator's own shape is checked by the schema."""
+    left, right = _kind(left_type), _kind(right_type)
+    if left == "binary" or left != right:
+        return [f"{label}: cannot compare a {left_type} column with a {right_type} column"]
+    return []
+
+
 def check_filter(
     label: str, operator: Operator, value: FilterValue, data_type: str, allowed_values: list[str] | None
 ) -> list[str]:

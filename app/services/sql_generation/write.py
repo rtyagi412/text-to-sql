@@ -4,7 +4,7 @@
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 
 from sqlalchemy.orm import Session
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.prompts.models import PromptVersion
 from app.schemas.ritm import Ritm
-from app.schemas.sql_generation import SqlWrite, SqlWriteRequest, SqlWriteResponse
+from app.schemas.sql_generation import SqlWrite, SqlWriteAnswer, SqlWriteRequest, SqlWriteResponse
 from app.services import schema_context_service, sql_check_service, sql_compile_service
 from app.services.approved_ritm_service import SimilarRitm
 from app.services.llm_service import LlmJsonResult, LlmOutputError
@@ -21,6 +21,7 @@ from app.services.schema_context_service import SchemaContext
 from app.services.sql_check_service import SqlRejectedError
 from app.services.sql_generation.common import (
     audit,
+    check_tables_needed,
     filter_problems,
     generate_checked,
     matched_ritms,
@@ -38,7 +39,8 @@ logger = logging.getLogger(__name__)
 
 def write_sql(request: SqlWriteRequest, catalog_db: Session, source_db: Session | None = None) -> SqlWriteResponse | None:
     """Step 2, after the requester confirms the column mapping: one validated, formatted T-SQL SELECT. The schema
-    the model sees is exactly the mapped tables plus the bridge tables of their join plan. Nothing is saved: the SQL
+    the model sees is the mapped tables (including the tables a derived field is computed over) plus the bridge
+    tables of their join plan, and it may ask once for a table beyond them. Nothing is saved: the SQL
     joins the approved pool only through approve_sql, after someone has reviewed it. `source_db`, when given, is
     asked to compile the query (see _compile_check). Returns None when the RITM does not exist."""
     ritm = get_ritm_by_id(request.ritm_number)
@@ -50,14 +52,15 @@ def write_sql(request: SqlWriteRequest, catalog_db: Session, source_db: Session 
 
     join_plan, schema = _plan_joins(request, catalog_db)  # 1. how the mapped tables join, and the schema they need
     examples = _find_similar_examples(request, ritm, catalog_db)  # 2. what similar approved SQL looks like
-    outcome, result = _ask_model(ritm, request, version, join_plan, schema, examples, source_db)  # 3 + 4. write, then check
+    asked = _ask_model(ritm, request, version, join_plan, schema, examples, catalog_db, source_db)  # 3 + 4. write, then check
 
+    outcome = asked.outcome
     write, checked = outcome.write, outcome.checked
-    call_audit = audit(version, result, schema=schema, examples=examples)
+    call_audit = audit(version, asked.call, schema=asked.schema, examples=examples, tables_requested=asked.tables_requested)
     status = write.derive_status()
     logger.info("sql write %s", json.dumps({"ritm": ritm.number, **call_audit.model_dump(), "status": status.value}))
     return SqlWriteResponse(  # 5. the SQL, plus what was checked about it
-        **{**write.model_dump(), "sql": checked.sql if checked else None},
+        **{**write.model_dump(exclude={"tables_needed"}), "sql": checked.sql if checked else None},
         ritm_number=ritm.number,
         status=status,
         tables=checked.tables if checked else [],
@@ -71,15 +74,35 @@ def write_sql(request: SqlWriteRequest, catalog_db: Session, source_db: Session 
 # --- 1. join plan and schema ------------------------------------------------------------------------------------
 
 
-def _plan_joins(request: SqlWriteRequest, catalog_db: Session) -> tuple[str, SchemaContext]:
+def _plan_joins(request: SqlWriteRequest, catalog_db: Session, extra_tables: list[str] | None = None) -> tuple[str, SchemaContext]:
     """The join plan between the tables the confirmed mapping uses, and the schema of exactly those tables plus the
-    bridge tables the plan passes through. The request's columns are checked against that schema before anything
-    goes to the model."""
+    bridge tables the plan passes through. The report's own tables are those of its plain columns and filters. The
+    tables a derived field is computed over, and `extra_tables` the model asked for, are branches of the plan:
+    each joins to the report's tables on its own. The request's columns are checked against that schema before
+    anything goes to the model."""
+    plain = [
+        *(ref for field in request.output_fields if field.derived is None for ref in field.column_refs),
+        *request.filters,
+        *request.additional_filters,
+    ]
     tables = list(
-        dict.fromkeys(item.table for item in (*request.output_fields, *request.filters, *request.additional_filters))
+        dict.fromkeys(
+            [
+                *(item.table for item in plain),
+                *(f.value_column.table for f in request.filters if f.value_column),
+            ]
+        )
     )
-    join_plan, bridge = build_join_plan(catalog_db, tables)
-    schema = schema_context_service.build_exact_schema_context(catalog_db, [*tables, *bridge])
+    branches = list(
+        dict.fromkeys(
+            [
+                *(ref.table for field in request.output_fields if field.derived is not None for ref in field.column_refs),
+                *(extra_tables or []),
+            ]
+        )
+    )
+    join_plan, bridge = build_join_plan(catalog_db, tables, branches)
+    schema = schema_context_service.build_exact_schema_context(catalog_db, [*tables, *branches, *bridge])
     _check_request_columns(request, schema)
     return join_plan, schema
 
@@ -89,7 +112,12 @@ def _check_request_columns(request: SqlWriteRequest, context: SchemaContext) -> 
     unknown = sorted(
         {
             f"{item.table}.{item.column}"
-            for item in (*request.output_fields, *request.filters, *request.additional_filters)
+            for item in (
+                *(ref for field in request.output_fields for ref in field.column_refs),
+                *request.filters,
+                *(f.value_column for f in request.filters if f.value_column),
+                *request.additional_filters,
+            )
             if item.column not in context.columns.get(item.table, {})
         }
     )
@@ -111,7 +139,7 @@ def _check_request_columns(request: SqlWriteRequest, context: SchemaContext) -> 
 def _find_similar_examples(request: SqlWriteRequest, ritm: Ritm, catalog_db: Session) -> list[SimilarRitm]:
     return similar_examples(
         ", ".join(f.requested for f in request.output_fields),
-        render_criteria([(f.requested, f.operator, f.value) for f in request.filters]),
+        render_criteria([(f.requested, f.operator, f.shown_value) for f in request.filters]),
         ritm.number,
         catalog_db,
     )
@@ -122,10 +150,18 @@ def _find_similar_examples(request: SqlWriteRequest, ritm: Ritm, catalog_db: Ses
 
 @dataclass(frozen=True)
 class _WriteOutcome:
-    write: SqlWrite
+    write: SqlWriteAnswer
     checked: sql_check_service.CheckedSql | None
     compiled: bool  # SQL Server compiled the query and its output columns are the requested ones
     note: str | None  # why the compile check did not run, when it was wanted but could not
+
+
+@dataclass(frozen=True)
+class _Asked:
+    outcome: _WriteOutcome
+    schema: SchemaContext  # the schema the answer was made against: larger than the first one if the model asked for tables
+    tables_requested: list[str]
+    call: LlmJsonResult  # token usage and attempts, summed over every call made
 
 
 def _ask_model(
@@ -135,17 +171,36 @@ def _ask_model(
     join_plan: str,
     schema: SchemaContext,
     examples: list[SimilarRitm],
+    catalog_db: Session,
     source_db: Session | None,
-) -> tuple[_WriteOutcome, LlmJsonResult]:
+) -> _Asked:
     """Asks the model for the SQL. A reply that fails the checks is sent back once with the reasons
-    (`generate_checked`), so there are at most 2 model calls."""
-    return generate_checked(
-        system=system_blocks(version.system_prompt),
-        user_content=_build_write_content(ritm, request, schema, examples, join_plan),
-        schema=SqlWrite.generation_json_schema(),
-        model=request.model,
-        build=partial(_parse_answer, request=request, schema=schema, source_db=source_db),
-    )
+    (`generate_checked`). The mapping's tables are all the model is shown, so a table the query needs can be missing
+    from them: the model sees an index of every table and may ask for such tables once. They are added as branches
+    of the join plan and it answers again; a second request is refused. Worst case: 2 rounds x 2 attempts = 4 calls."""
+    system = system_blocks(version.system_prompt, schema_context_service.table_index(catalog_db))
+    known_tables = schema_context_service.existing_table_keys(catalog_db)
+
+    requested: list[str] = []
+    total: LlmJsonResult | None = None
+    for may_ask in (True, False):
+        outcome, result = generate_checked(
+            system=system,
+            user_content=_build_write_content(ritm, request, schema, examples, join_plan),
+            schema=SqlWriteAnswer.generation_json_schema(),
+            model=request.model,
+            build=partial(
+                _parse_answer, request=request, schema=schema, known_tables=known_tables, may_ask=may_ask, source_db=source_db
+            ),
+        )
+        total = result.after(total)
+        if not outcome.write.tables_needed:
+            break
+        requested = outcome.write.tables_needed
+        logger.info("write asked for more tables %s", json.dumps({"ritm": ritm.number, "tables": requested}))
+        join_plan, schema = _plan_joins(request, catalog_db, extra_tables=requested)
+
+    return _Asked(outcome=outcome, schema=schema, tables_requested=requested, call=total)
 
 
 def _build_write_content(
@@ -155,7 +210,7 @@ def _build_write_content(
     confirmed = {
         "ritm_number": ritm.number,
         "title": ritm.name,
-        "output_fields": [f.model_dump(mode="json") for f in request.output_fields],
+        "output_fields": [f.model_dump(mode="json", exclude_none=True) for f in request.output_fields],
         "filters": [f.model_dump(mode="json") for f in request.filters],
         "additional_filters": [f.model_dump(mode="json", exclude={"source_ritms"}) for f in request.additional_filters],
         "considerations": [c.text for c in request.considerations],
@@ -167,10 +222,22 @@ def _build_write_content(
     return "\n\n".join(sections)
 
 
-def _parse_answer(data: dict, *, request: SqlWriteRequest, schema: SchemaContext, source_db: Session | None) -> _WriteOutcome:
+def _parse_answer(
+    data: dict,
+    *,
+    request: SqlWriteRequest,
+    schema: SchemaContext,
+    known_tables: set[str],
+    may_ask: bool,
+    source_db: Session | None,
+) -> _WriteOutcome:
     """Step 4, run on every model reply by `generate_checked`: raising LlmOutputError is what sends the reply back
-    for a correction. The SQL must pass our own checks and then SQL Server's compile check."""
-    write = SqlWrite.model_validate(data)
+    for a correction. The SQL must pass our own checks and then SQL Server's compile check. A request for more
+    tables is only checked (the rest of that answer is thrown away, and the model is asked again with them shown)."""
+    write = SqlWriteAnswer.model_validate(data)
+    if write.tables_needed:
+        check_tables_needed(write.tables_needed, schema, known_tables, may_ask)
+        return _WriteOutcome(write=write, checked=None, compiled=False, note=None)
     if not write.sql:
         return _WriteOutcome(write=write, checked=None, compiled=False, note=None)
     checked = _check_generated_sql(write.sql, request, schema)
@@ -194,6 +261,16 @@ def _check_generated_sql(sql: str, request: SqlWriteRequest, context: SchemaCont
     for item in (*request.filters, *request.additional_filters):
         if (item.table.lower(), item.column.lower()) not in checked.filter_columns:
             problems.append(f"no condition uses {item.table}.{item.column}")
+    for f in request.filters:
+        if f.value_column and (f.value_column.table.lower(), f.value_column.column.lower()) not in checked.filter_columns:
+            problems.append(f"no condition uses {f.value_column.table}.{f.value_column.column}, which '{f.requested}' compares with")
+    read = {table.lower() for table in checked.tables}
+    for field in request.output_fields:
+        for ref in field.derived.sources if field.derived else []:
+            if ref.table.lower() not in read:
+                problems.append(
+                    f"'{field.requested}' is computed from {ref.table}.{ref.column}, but the query does not read {ref.table}"
+                )
     if problems:
         raise LlmOutputError("The SQL was rejected: " + "; ".join(problems))
     return checked

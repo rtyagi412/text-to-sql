@@ -89,7 +89,7 @@ JOIN sys.columns fc ON fc.object_id = fkc.parent_object_id AND fc.column_id = fk
 JOIN sys.tables pt ON fkc.referenced_object_id = pt.object_id
 JOIN sys.schemas ps ON pt.schema_id = ps.schema_id
 JOIN sys.columns pc ON pc.object_id = fkc.referenced_object_id AND pc.column_id = fkc.referenced_column_id
-ORDER BY fk.name
+ORDER BY fk.name, fkc.constraint_column_id
 """
 
 # Text types measured in characters (length shown to the user, e.g. nvarchar(50))

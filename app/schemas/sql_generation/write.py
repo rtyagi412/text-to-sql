@@ -44,11 +44,14 @@ class SqlWrite(BaseModel):
         default_factory=list, description="Empty unless the SQL genuinely cannot be written without the answer."
     )
 
+    def _asks_for_tables(self) -> bool:
+        return False
+
     @model_validator(mode="after")
     def _check_sql_matches_clarifications(self) -> "SqlWrite":
         if self.clarifications:
             self.sql = None
-        elif not (self.sql and self.sql.strip()):
+        elif not (self.sql and self.sql.strip()) and not self._asks_for_tables():
             raise ValueError("sql must be non-empty when there are no clarifications")
         return self
 
@@ -58,6 +61,23 @@ class SqlWrite(BaseModel):
     @classmethod
     def generation_json_schema(cls) -> dict:
         return cls.model_json_schema()
+
+
+class SqlWriteAnswer(SqlWrite):
+    """What the model returns for the write stage: a SqlWrite, or a request to see more of the schema first.
+    `tables_needed` is not part of the response to the requester; the service acts on it and drops it."""
+
+    tables_needed: list[str] = Field(
+        default_factory=list,
+        description=(
+            'Tables from <table_index>, as "schema.table", whose columns must be shown before the SQL can be written. '
+            "Empty when <schema> is enough. When non-empty the tables are added and you are asked again; the rest of "
+            "this answer is discarded, so leave sql null and clarifications empty."
+        ),
+    )
+
+    def _asks_for_tables(self) -> bool:
+        return bool(self.tables_needed)
 
 
 class SqlWriteResponse(SqlWrite):
