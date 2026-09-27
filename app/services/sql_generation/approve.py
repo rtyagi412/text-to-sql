@@ -20,7 +20,8 @@ def approve_sql(
     """Validates and formats reviewed SQL and stores it in the approved_ritms table against the RITM, overwriting
     any earlier entry for it. With `source_db`, the SQL must also compile and run on a capped sample
     (sql_guardrail_service): hand-edited SQL that SQL Server refuses is never approved (SqlRuntimeError, a 400).
-    The record keeps the ticket's own output_fields and report_criteria: retrieval matches on them, and later requests read what this SQL does beyond them as the conventions it carries."""
+    The record keeps the ticket's own output_fields and report_criteria: retrieval matches on them, and later
+    requests read what this SQL does beyond them as the conventions it carries."""
     ritm = get_ritm_by_id(request.ritm_number)
     if ritm is None:
         return None
