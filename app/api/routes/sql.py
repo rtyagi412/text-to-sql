@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.db.catalog_session import get_catalog_db
 from app.db.session import get_db
 from app.schemas.sql_generation import (
+    ApprovedRitmResponse,
     ApproveSqlRequest,
     ApproveSqlResponse,
     ColumnMappingRequest,
@@ -21,7 +22,7 @@ from app.schemas.sql_generation import (
 from app.services.llm_service import LlmApiError, LlmConfigError, LlmOutputError, LlmRefusalError
 from app.services.embedding_service import EmbeddingConfigError
 from app.services.schema_context_service import CatalogEmptyError
-from app.services.sql_generation import approve_sql, extract_requirements, map_columns, write_sql
+from app.services.sql_generation import approve_sql, extract_requirements, get_approval, map_columns, write_sql
 
 router = APIRouter(prefix="/sql", tags=["sql"])
 
@@ -100,11 +101,21 @@ def approve(
     body: ApproveSqlRequest,
     catalog_db: Session = Depends(get_catalog_db),
 ) -> ApproveSqlResponse:
-    """Stores reviewed SQL in approved_ritms.json against the RITM (overwriting any earlier entry), so later
-    requests can draw on it. The SQL is validated and formatted first; SQL that is not a single plain SELECT
-    over tables and columns in the catalog is refused."""
+    """Saves reviewed SQL in the approved_ritms table against the RITM (overwriting any earlier entry, and
+    bumping its version), so later requests can draw on it. The SQL is validated and formatted first; SQL that is
+    not a single plain SELECT over tables and columns in the catalog is refused."""
     with _http_errors():
-        result = approve_sql(body.ritm_number, body.sql, catalog_db)
+        result = approve_sql(body, catalog_db)
     if result is None:
         raise HTTPException(status_code=404, detail=f"RITM '{body.ritm_number}' not found")
+    return result
+
+
+@router.get("/approve/{ritm_number}", response_model=ApprovedRitmResponse)
+def approval(ritm_number: str, catalog_db: Session = Depends(get_catalog_db)) -> ApprovedRitmResponse:
+    """The stored approval for a RITM: 404 when it has not been approved. The UI uses it to show that approving
+    again will overwrite, and to display who approved what, when."""
+    result = get_approval(ritm_number, catalog_db)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"RITM '{ritm_number}' has no approved SQL")
     return result

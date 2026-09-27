@@ -56,6 +56,29 @@ class SchemaColumn(Base):
     table: Mapped["SchemaTable"] = relationship(back_populates="columns")
 
 
+class ApprovedRitmRecord(Base):
+    """One row per approved RITM, in the catalog database. It is not part of the catalog: /catalog/sync truncates only
+    the schema_* tables, so approvals survive a re-sync. Approving again overwrites the row and bumps `version`."""
+
+    __tablename__ = "approved_ritms"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ritm_number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    ritm_name: Mapped[str] = mapped_column(Text, nullable=False)
+    # The ticket's own text, as at approval: retrieval matches new tickets against these two.
+    output_fields: Mapped[str] = mapped_column(Text, nullable=False)
+    report_criteria: Mapped[str] = mapped_column(Text, nullable=False)
+    sql: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tables: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    clarifications: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    warnings: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    approved_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class SchemaRelationship(Base):
     """A single FK edge, used later for join-path resolution (Phase 5)."""
 

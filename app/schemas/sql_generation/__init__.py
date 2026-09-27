@@ -25,15 +25,18 @@ from app.schemas.sql_generation.mapping import (
     ColumnMappingAnswer,
     ColumnMappingRequest,
     ColumnMappingResponse,
+    ColumnRef,
     Consideration,
+    DerivedValue,
     MappedField,
     MappedFilter,
 )
-from app.schemas.sql_generation.write import SqlWrite, SqlWriteRequest, SqlWriteResponse
-from app.schemas.sql_generation.approve import ApproveSqlRequest, ApproveSqlResponse
+from app.schemas.sql_generation.write import SqlWrite, SqlWriteAnswer, SqlWriteRequest, SqlWriteResponse
+from app.schemas.sql_generation.approve import ApprovedRitmResponse, ApproveSqlRequest, ApproveSqlResponse
 
 __all__ = [
     "AdditionalFilter",
+    "ApprovedRitmResponse",
     "ApproveSqlRequest",
     "ApproveSqlResponse",
     "Clarification",
@@ -41,7 +44,9 @@ __all__ = [
     "ColumnMappingAnswer",
     "ColumnMappingRequest",
     "ColumnMappingResponse",
+    "ColumnRef",
     "Consideration",
+    "DerivedValue",
     "ExtractionRequest",
     "FilterValue",
     "GenerationAudit",
@@ -55,6 +60,7 @@ __all__ = [
     "RitmExtraction",
     "RitmExtractionResponse",
     "SqlWrite",
+    "SqlWriteAnswer",
     "SqlWriteRequest",
     "SqlWriteResponse",
     "Status",

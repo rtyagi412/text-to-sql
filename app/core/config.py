@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,7 +18,6 @@ class Settings(BaseSettings):
     debug: bool = False
 
     ritm_samples_path: Path = PROJECT_ROOT / "ritm_samples.json"
-    approved_ritms_path: Path = PROJECT_ROOT / "approved_ritms.json"
 
     db_server: str
     db_name: str
@@ -48,6 +48,23 @@ class Settings(BaseSettings):
     # Redact emails / long digit runs from the RITM `description` before it leaves the network boundary.
     redact_ritm_description: bool = True
 
+    # SSRS (app/services/reporting): the web portal's root URL, e.g. https://reports.example.com/reports. The REST
+    # API is at <ssrs_url>/api/v2.0. Left unset, generating an RDL still works (given a data source below); publishing
+    # and subscribing do not.
+    ssrs_url: str | None = None
+    ssrs_auth: Literal["ntlm", "basic"] = "ntlm"
+    ssrs_username: str | None = None
+    ssrs_password: str | None = None
+    ssrs_domain: str | None = None  # NTLM only: DOMAIN\user is sent when set
+    ssrs_verify_tls: bool = True
+    ssrs_timeout: float = 60.0
+    ssrs_report_folder: str = "/Text2SQL Reports"  # must already exist on the server
+    # How the RDL reaches its data: a shared data source already on the server (preferred, no credentials in the
+    # RDL), else a connection string embedded in every report. One of the two is required to generate an RDL. The
+    # connection string must use integrated security: one holding a user name or password is refused.
+    ssrs_data_source_path: str | None = None
+    ssrs_connection_string: str | None = None
+
     catalog_db_server: str = "localhost"
     catalog_db_port: int = 5435
     catalog_db_name: str = "schema_catalog"
@@ -72,6 +89,7 @@ class Settings(BaseSettings):
     schema_max_queries: int = 10  # search queries per request: the whole request, then one per field and per condition
     schema_search_top_k: int = 5  # tables taken from each query's results
     schema_max_tables: int = 20  # cap on the slice: tables from similar examples, search hits and FK neighbours together
+    schema_neighbour_reserve: int = 5  # places of that cap held for FK neighbours of the top hits (the tables referencing a hit)
 
     # Approved (already-solved) RITMs shown to the model as reference solutions. They are embedded in memory, so
     # they can use a different model from the schema catalog. voyage-code-4 (the catalog's model) ranked the
