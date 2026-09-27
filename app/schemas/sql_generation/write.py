@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.sql_generation.common import Clarification, GenerationAudit, MatchedRitm, Status
 from app.schemas.sql_generation.mapping import AdditionalFilter, Consideration, MappedField, MappedFilter
+from app.schemas.sql_generation.validate import PlanEstimate, SampleRun
 
 
 class SqlWriteRequest(BaseModel):
@@ -86,7 +87,12 @@ class SqlWriteResponse(SqlWrite):
     tables: list[str] = Field(default_factory=list, description="Tables the SQL reads, as \"schema.table\".")
     warnings: list[str] = Field(
         default_factory=list,
-        description="Performance smells found in the SQL (non-sargable predicates, leading wildcards, DISTINCT). Not errors.",
+        description=(
+            "Performance findings, not errors: from the SQL text (non-sargable predicates, leading wildcards, DISTINCT, "
+            "OR across columns, NOT IN subqueries, ...), from SQL Server's estimated plan (big scans, implicit "
+            "conversions, missing indexes, high cost) and from the sample run (slow, no rows). Also notes on any "
+            "source-database check that was skipped."
+        ),
     )
     compiled: bool = Field(
         default=False,
@@ -94,6 +100,11 @@ class SqlWriteResponse(SqlWrite):
             "True when SQL Server compiled the query (sp_describe_first_result_set: nothing was run) and its output "
             "columns are the requested ones. False when the check was switched off or the server could not be reached."
         ),
+    )
+    plan: PlanEstimate | None = Field(default=None, description="SQL Server's estimated plan; null when the check did not run.")
+    sample: SampleRun | None = Field(
+        default=None,
+        description="The query run capped at a few rows and rolled back, proving it executes; null when the check did not run.",
     )
     matched_ritms: list[MatchedRitm]
     audit: GenerationAudit

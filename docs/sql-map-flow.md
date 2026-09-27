@@ -103,6 +103,7 @@ app/services/sql_generation/
     write.py          step 2  /sql/write
     join_plan.py                                  FK join paths shown to the write step
     approve.py        step 3  /sql/approve
+    validate.py               /sql/validate       every SQL guardrail, reported (see sql-guardrails.md)
     common.py         prompt assembly, generate_checked (retry), audit, similar_examples
 app/schemas/sql_generation/                 request/response/answer models, one module per step (+ common.py)
     mapping.py        ColumnMappingRequest → ColumnMappingAnswer (what the model returns) → ColumnMappingResponse

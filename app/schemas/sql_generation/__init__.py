@@ -33,6 +33,7 @@ from app.schemas.sql_generation.mapping import (
 )
 from app.schemas.sql_generation.write import SqlWrite, SqlWriteAnswer, SqlWriteRequest, SqlWriteResponse
 from app.schemas.sql_generation.approve import ApprovedRitmResponse, ApproveSqlRequest, ApproveSqlResponse
+from app.schemas.sql_generation.validate import PlanEstimate, SampleRun, SqlValidateRequest, SqlValidateResponse
 
 __all__ = [
     "AdditionalFilter",
@@ -55,10 +56,14 @@ __all__ = [
     "MappedFilter",
     "MatchedRitm",
     "Operator",
+    "PlanEstimate",
     "RequestedField",
     "RequestedFilter",
     "RitmExtraction",
     "RitmExtractionResponse",
+    "SampleRun",
+    "SqlValidateRequest",
+    "SqlValidateResponse",
     "SqlWrite",
     "SqlWriteAnswer",
     "SqlWriteRequest",

@@ -13,12 +13,13 @@ from app.core.config import get_settings
 from app.prompts.models import PromptVersion
 from app.schemas.ritm import Ritm
 from app.schemas.sql_generation import SqlWrite, SqlWriteAnswer, SqlWriteRequest, SqlWriteResponse
-from app.services import schema_context_service, sql_check_service, sql_compile_service
+from app.services import schema_context_service, sql_check_service, sql_guardrail_service
 from app.services.approved_ritm_service import SimilarRitm
 from app.services.llm_service import LlmJsonResult, LlmOutputError
 from app.services.ritm_service import get_ritm_by_id
 from app.services.schema_context_service import SchemaContext
 from app.services.sql_check_service import SqlRejectedError
+from app.services.sql_guardrail_service import RuntimeReport, SqlRuntimeError
 from app.services.sql_generation.common import (
     audit,
     check_tables_needed,
@@ -42,7 +43,7 @@ def write_sql(request: SqlWriteRequest, catalog_db: Session, source_db: Session 
     the model sees is the mapped tables (including the tables a derived field is computed over) plus the bridge
     tables of their join plan, and it may ask once for a table beyond them. Nothing is saved: the SQL
     joins the approved pool only through approve_sql, after someone has reviewed it. `source_db`, when given, is
-    asked to compile the query (see _compile_check). Returns None when the RITM does not exist."""
+    asked to compile, plan and sample-run the query (see _runtime_check). Returns None when the RITM does not exist."""
     ritm = get_ritm_by_id(request.ritm_number)
     if ritm is None:
         return None
@@ -55,7 +56,7 @@ def write_sql(request: SqlWriteRequest, catalog_db: Session, source_db: Session 
     asked = _ask_model(ritm, request, version, join_plan, schema, examples, catalog_db, source_db)  # 3 + 4. write, then check
 
     outcome = asked.outcome
-    write, checked = outcome.write, outcome.checked
+    write, checked, runtime = outcome.write, outcome.checked, outcome.runtime
     call_audit = audit(version, asked.call, schema=asked.schema, examples=examples, tables_requested=asked.tables_requested)
     status = write.derive_status()
     logger.info("sql write %s", json.dumps({"ritm": ritm.number, **call_audit.model_dump(), "status": status.value}))
@@ -64,8 +65,10 @@ def write_sql(request: SqlWriteRequest, catalog_db: Session, source_db: Session 
         ritm_number=ritm.number,
         status=status,
         tables=checked.tables if checked else [],
-        warnings=[*(checked.warnings if checked else []), *([outcome.note] if outcome.note else [])],
-        compiled=outcome.compiled,
+        warnings=[*(checked.warnings if checked else []), *(runtime.warnings if runtime else [])],
+        compiled=runtime.compiled if runtime else False,
+        plan=runtime.plan if runtime else None,
+        sample=runtime.sample if runtime else None,
         matched_ritms=matched_ritms(examples),
         audit=call_audit,
     )
@@ -152,8 +155,7 @@ def _find_similar_examples(request: SqlWriteRequest, ritm: Ritm, catalog_db: Ses
 class _WriteOutcome:
     write: SqlWriteAnswer
     checked: sql_check_service.CheckedSql | None
-    compiled: bool  # SQL Server compiled the query and its output columns are the requested ones
-    note: str | None  # why the compile check did not run, when it was wanted but could not
+    runtime: RuntimeReport | None  # what the source database said: compiled, estimated plan, sample run
 
 
 @dataclass(frozen=True)
@@ -232,18 +234,18 @@ def _parse_answer(
     source_db: Session | None,
 ) -> _WriteOutcome:
     """Step 4, run on every model reply by `generate_checked`: raising LlmOutputError is what sends the reply back
-    for a correction. The SQL must pass our own checks and then SQL Server's compile check. A request for more
-    tables is only checked (the rest of that answer is thrown away, and the model is asked again with them shown)."""
+    for a correction. The SQL must pass our own checks and then SQL Server's (compile, plan, sample run). A request
+    for more tables is only checked (the rest of that answer is thrown away, and the model is asked again with them shown)."""
     write = SqlWriteAnswer.model_validate(data)
     if write.tables_needed:
         check_tables_needed(write.tables_needed, schema, known_tables, may_ask)
-        return _WriteOutcome(write=write, checked=None, compiled=False, note=None)
+        return _WriteOutcome(write=write, checked=None, runtime=None)
     if not write.sql:
-        return _WriteOutcome(write=write, checked=None, compiled=False, note=None)
+        return _WriteOutcome(write=write, checked=None, runtime=None)
     checked = _check_generated_sql(write.sql, request, schema)
     expected_headers = [f.requested for f in request.output_fields]
-    compiled, note = _compile_check(checked.sql, expected_headers, source_db)
-    return _WriteOutcome(write=write, checked=checked, compiled=compiled, note=note)
+    runtime = _runtime_check(checked.sql, expected_headers, source_db)
+    return _WriteOutcome(write=write, checked=checked, runtime=runtime)
 
 
 def _check_generated_sql(sql: str, request: SqlWriteRequest, context: SchemaContext) -> sql_check_service.CheckedSql:
@@ -264,6 +266,8 @@ def _check_generated_sql(sql: str, request: SqlWriteRequest, context: SchemaCont
     for f in request.filters:
         if f.value_column and (f.value_column.table.lower(), f.value_column.column.lower()) not in checked.filter_columns:
             problems.append(f"no condition uses {f.value_column.table}.{f.value_column.column}, which '{f.requested}' compares with")
+    if checked.unjoined:
+        problems.append(f"{', '.join(checked.unjoined)} joined with no join condition; join along <join_plan>")
     read = {table.lower() for table in checked.tables}
     for field in request.output_fields:
         for ref in field.derived.sources if field.derived else []:
@@ -276,17 +280,14 @@ def _check_generated_sql(sql: str, request: SqlWriteRequest, context: SchemaCont
     return checked
 
 
-def _compile_check(sql: str, expected_headers: list[str], source_db: Session | None) -> tuple[bool, str | None]:
-    """Has the source database compile the query (nothing runs, no rows are read). What it refuses, or a result
-    whose columns are not the requested ones, is raised as LlmOutputError so the model is shown SQL Server's own
-    reason and corrects the query. A server that cannot be reached is not the query's fault: the check is skipped."""
-    if source_db is None or not settings.write_compile_check:
-        return False, None
-    outcome = sql_compile_service.describe(source_db, sql)
-    if outcome.error:
-        raise LlmOutputError(f"SQL Server could not compile the query: {outcome.error}")
-    if outcome.columns is None:
-        return False, f"compile check skipped: {outcome.unavailable}"
-    if outcome.columns != expected_headers:
-        raise LlmOutputError(f"SQL Server reports the result columns as {outcome.columns}, expected {expected_headers}")
-    return True, None
+def _runtime_check(sql: str, expected_headers: list[str], source_db: Session | None) -> RuntimeReport | None:
+    """Has the source database compile the query, estimate its plan and run it capped at a few rows
+    (sql_guardrail_service). What SQL Server refuses or fails on, or a result whose columns are not the requested
+    ones, is raised as LlmOutputError so the model is shown SQL Server's own reason and corrects the query. A server
+    that cannot be reached is not the query's fault: the checks are skipped and a warning says so."""
+    if source_db is None:
+        return None
+    try:
+        return sql_guardrail_service.run_on_source(source_db, sql, expected_headers)
+    except SqlRuntimeError as exc:
+        raise LlmOutputError(str(exc)) from exc

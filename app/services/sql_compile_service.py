@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass
 
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError, ProgrammingError
+from sqlalchemy.exc import DBAPIError, ProgrammingError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 # Compiles the batch and describes the result set it would return: nothing is executed and no rows are read, so
@@ -24,9 +24,10 @@ _BOILERPLATE = "The batch could not be analyzed"
 _STATE_PREFIX = re.compile(r"^[\s(]*'?[0-9A-Z]{5}'?\s*,\s*'?")
 
 
-def _message(exc: DBAPIError) -> str:
+def server_message(exc: SQLAlchemyError) -> str:
     """SQL Server's own sentence(s), without the driver prefix, state codes, the SQL echo or SQLAlchemy's link."""
-    raw = str(exc.orig) if exc.orig is not None else str(exc)
+    orig = getattr(exc, "orig", None)
+    raw = str(orig) if orig is not None else str(exc)
     sentences = dict.fromkeys(m.strip() for m in _SERVER_MESSAGE.findall(raw) if not m.startswith(_BOILERPLATE))
     if sentences:
         return "; ".join(sentences)[:500]
@@ -42,10 +43,10 @@ def describe(source_db: Session, sql: str) -> CompileOutcome:
         rows = source_db.execute(_DESCRIBE, {"sql": sql}).mappings().all()
     except ProgrammingError as exc:  # SQLSTATE 42xxx: the query is wrong
         source_db.rollback()
-        return CompileOutcome(error=_message(exc))
+        return CompileOutcome(error=server_message(exc))
     except DBAPIError as exc:  # connection, login, timeout
         source_db.rollback()
-        return CompileOutcome(unavailable=_message(exc))
+        return CompileOutcome(unavailable=server_message(exc))
 
     for row in rows:
         if row.get("error_message"):

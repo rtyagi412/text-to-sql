@@ -16,13 +16,22 @@ from app.schemas.sql_generation import (
     ColumnMappingResponse,
     ExtractionRequest,
     RitmExtractionResponse,
+    SqlValidateRequest,
+    SqlValidateResponse,
     SqlWriteRequest,
     SqlWriteResponse,
 )
 from app.services.llm_service import LlmApiError, LlmConfigError, LlmOutputError, LlmRefusalError
 from app.services.embedding_service import EmbeddingConfigError
 from app.services.schema_context_service import CatalogEmptyError
-from app.services.sql_generation import approve_sql, extract_requirements, get_approval, map_columns, write_sql
+from app.services.sql_generation import (
+    approve_sql,
+    extract_requirements,
+    get_approval,
+    map_columns,
+    validate_sql,
+    write_sql,
+)
 
 router = APIRouter(prefix="/sql", tags=["sql"])
 
@@ -87,8 +96,10 @@ def write(
 ) -> SqlWriteResponse:
     """Step 2, after the requester confirms the /sql/map result (post that response back, with any proposed
     additional filter they rejected deleted): writes one T-SQL SELECT, validated against the catalog, formatted,
-    compiled by the source database (nothing is executed), and checked for performance smells (returned as
-    warnings). Nothing is saved: call /sql/approve once the SQL has been reviewed."""
+    then put through the source-database guardrails: compiled, its estimated plan read for performance problems,
+    and run capped at a few rows (then rolled back) to prove it executes. A failure is sent back to the model to
+    correct; performance findings are returned as warnings. Nothing is saved: call /sql/approve once the SQL has
+    been reviewed."""
     with _http_errors():
         result = write_sql(body, catalog_db, source_db)
     if result is None:
@@ -100,15 +111,30 @@ def write(
 def approve(
     body: ApproveSqlRequest,
     catalog_db: Session = Depends(get_catalog_db),
+    source_db: Session = Depends(get_db),
 ) -> ApproveSqlResponse:
     """Saves reviewed SQL in the approved_ritms table against the RITM (overwriting any earlier entry, and
     bumping its version), so later requests can draw on it. The SQL is validated and formatted first; SQL that is
-    not a single plain SELECT over tables and columns in the catalog is refused."""
+    not a single plain SELECT over tables and columns in the catalog is refused, and so is SQL that SQL Server
+    cannot compile or fails to run on a capped sample (400)."""
     with _http_errors():
-        result = approve_sql(body, catalog_db)
+        result = approve_sql(body, catalog_db, source_db)
     if result is None:
         raise HTTPException(status_code=404, detail=f"RITM '{body.ritm_number}' not found")
     return result
+
+
+@router.post("/validate", response_model=SqlValidateResponse)
+def validate(
+    body: SqlValidateRequest,
+    catalog_db: Session = Depends(get_catalog_db),
+    source_db: Session = Depends(get_db),
+) -> SqlValidateResponse:
+    """Runs every SQL guardrail on any SELECT and reports the result without saving anything: the static rules (one
+    plain read-only SELECT over catalog tables and columns) and performance checks, then SQL Server's compile check,
+    estimated plan and a run capped at a few rows (rolled back). `valid` is false with `errors` when a check fails;
+    use it on hand-edited SQL before /sql/approve."""
+    return validate_sql(body, catalog_db, source_db)
 
 
 @router.get("/approve/{ritm_number}", response_model=ApprovedRitmResponse)

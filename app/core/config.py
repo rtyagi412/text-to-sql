@@ -45,6 +45,23 @@ class Settings(BaseSettings):
     # SQL Server's own errors. A server that cannot be reached skips the check instead of failing the request.
     write_compile_check: bool = True
 
+    # Guardrails run on the source database for every written, approved or /sql/validate query
+    # (sql_guardrail_service). Each one is skipped, with a note, when the server cannot be asked.
+    # Estimated plan (SET SHOWPLAN_XML: nothing runs): warns on expensive plans, big scans, implicit conversions,
+    # cartesian joins and missing indexes. SQL_PLAN_MAX_COST, when set, rejects a plan costlier than it.
+    sql_plan_check: bool = True
+    sql_plan_warn_cost: float = 50.0
+    sql_plan_max_cost: float | None = None
+    sql_plan_scan_min_rows: int = 100_000  # a scan of a table at least this big that keeps under 10% of it is flagged
+    # Sample run: the query is executed capped at SQL_SAMPLE_ROWS rows (TOP n), under a query timeout, then rolled
+    # back, to prove it runs without a runtime error (conversion, divide by zero, subquery returning several values).
+    # Use a read-only login for the source database: the SQL is checked to be one plain SELECT before it runs.
+    sql_sample_check: bool = True
+    sql_sample_rows: int = 10
+    sql_sample_timeout_seconds: int = 30
+    sql_sample_slow_ms: int = 5000  # a capped sample slower than this gets a performance warning
+    sql_sample_preview: bool = True  # return the sample rows in the response (never sent to the model)
+
     # Redact emails / long digit runs from the RITM `description` before it leaves the network boundary.
     redact_ritm_description: bool = True
 

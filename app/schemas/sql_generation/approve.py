@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.sql_generation.validate import PlanEstimate, SampleRun
+
 
 class ApproveSqlRequest(BaseModel):
     ritm_number: str
@@ -39,3 +41,6 @@ class ApproveSqlResponse(BaseModel):
     version: int
     approved_at: datetime
     approved_by: str | None
+    compiled: bool = Field(default=False, description="True when SQL Server compiled the query before it was saved.")
+    plan: PlanEstimate | None = None
+    sample: SampleRun | None = Field(default=None, description="The capped run that proved the query executes.")

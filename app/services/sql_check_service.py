@@ -25,6 +25,7 @@ class CheckedSql:
     select_aliases: list[str]  # the report's column headers, in order
     filter_columns: set[tuple[str, str]]  # (lower-case "schema.table", column) used in a WHERE or JOIN condition
     warnings: list[str]  # performance smells; they do not make the SQL wrong
+    unjoined: list[str]  # tables joined with no join condition (comma or CROSS JOIN)
 
 
 def _parse(sql: str) -> exp.Select:
@@ -128,8 +129,95 @@ def _sargability_warnings(tree: exp.Select) -> list[str]:
     return warnings
 
 
+def unjoined_tables(tree: exp.Select) -> list[str]:
+    """Tables joined with no join condition (a comma or CROSS JOIN): each row is paired with every row of the other
+    side, which multiplies the rows and is almost never what a report means. APPLY is not counted: it is correlated."""
+    found = []
+    for select in tree.find_all(exp.Select):
+        for join in select.args.get("joins") or []:
+            if isinstance(join.this, exp.Lateral) or join.args.get("on") or join.args.get("using"):
+                continue
+            found.append(join.this.sql(dialect=_DIALECT))
+    return found
+
+
+def _own_nodes(select: exp.Select, node: exp.Expression, kind: type[exp.Expression]) -> list[exp.Expression]:
+    """The `kind` nodes under `node` that belong to `select` itself, not to a subquery nested in it."""
+    return [found for found in node.find_all(kind) if found.find_ancestor(exp.Select) is select]
+
+
+def _within(node: exp.Expression, stop: exp.Expression, *kinds: type[exp.Expression]) -> bool:
+    """Whether a `kinds` node lies between `node` and `stop` (exclusive), looking upward."""
+    parent = node.parent
+    while parent is not None and parent is not stop:
+        if isinstance(parent, kinds):
+            return True
+        parent = parent.parent
+    return False
+
+
+def _left_join_filtered_warnings(tree: exp.Select) -> list[str]:
+    """A LEFT JOIN whose table is then filtered in WHERE drops its unmatched rows again: it is an INNER JOIN that the
+    optimizer may not simplify. Conditions that keep the NULL row (IS NULL, OR, COALESCE/ISNULL) are left alone."""
+    warnings = []
+    for select in tree.find_all(exp.Select):
+        where = select.args.get("where")
+        if where is None:
+            continue
+        for join in select.args.get("joins") or []:
+            if join.side != "LEFT":
+                continue
+            alias = join.this.alias_or_name.lower()
+            for column in _own_nodes(select, where, exp.Column):
+                if column.table.lower() != alias:
+                    continue
+                if _within(column, where, exp.Is, exp.Or, exp.Coalesce):
+                    continue
+                warnings.append(
+                    f"`{join.this.sql(dialect=_DIALECT)}` is LEFT JOINed but WHERE filters on {column.sql(dialect=_DIALECT)}, "
+                    "which removes the unmatched rows: write INNER JOIN, or move the condition into ON to keep them"
+                )
+                break
+    return warnings
+
+
+def _structure_warnings(tree: exp.Select) -> list[str]:
+    warnings = [
+        f"`{table}` is joined with no join condition, so every row pairs with every row of the other side"
+        for table in unjoined_tables(tree)
+    ]
+    for node in tree.find_all(exp.Not):
+        inner = node.this.this if isinstance(node.this, exp.Paren) else node.this
+        if isinstance(inner, exp.In) and inner.args.get("query") is not None:
+            warnings.append(
+                f"`{node.sql(dialect=_DIALECT)[:90]}`: NOT IN over a subquery returns no rows at all if the subquery "
+                "yields a NULL, and can stop the optimizer using an anti-join; use NOT EXISTS"
+            )
+    for item in tree.expressions:
+        if item.find(exp.Subquery) is not None and not item.find(exp.Exists):
+            warnings.append(
+                f"output column {item.alias_or_name!r} is a subquery in the select list, evaluated for every row; "
+                "join the table or aggregate it once in a derived table"
+            )
+    for select in tree.find_all(exp.Select):
+        conditions = [select.args.get("where"), *(j.args.get("on") for j in select.args.get("joins") or [])]
+        for condition in filter(None, conditions):
+            for node in _own_nodes(select, condition, exp.Or):
+                if _within(node, condition, exp.Or):
+                    continue  # the outermost OR of a chain speaks for it
+                columns = {(c.table.lower(), c.name.lower()) for c in node.find_all(exp.Column)}
+                if len(columns) > 1:
+                    warnings.append(
+                        f"`{node.sql(dialect=_DIALECT)[:90]}` ORs conditions on different columns, so no single index "
+                        "can seek it; use IN for one column, or check that the OR is really needed"
+                    )
+    warnings.extend(_left_join_filtered_warnings(tree))
+    return warnings
+
+
 def _warnings(tree: exp.Select) -> list[str]:
     warnings = _sargability_warnings(tree)
+    warnings.extend(_structure_warnings(tree))
     for like in tree.find_all(exp.Like):
         pattern = like.args.get("expression")
         if isinstance(pattern, exp.Literal) and pattern.is_string and pattern.name.startswith("%"):
@@ -184,4 +272,5 @@ def check_sql(sql: str, columns: dict[str, dict[str, str]]) -> CheckedSql:
         select_aliases=[item.alias_or_name for item in tree.expressions],
         filter_columns=filter_columns,
         warnings=_warnings(tree),
+        unjoined=unjoined_tables(tree),
     )
