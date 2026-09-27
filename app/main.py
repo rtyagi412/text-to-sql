@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.api.routes.catalog import router as catalog_router
 from app.api.routes.health import router as health_router
+from app.api.routes.report import router as report_router
 from app.api.routes.ritm import router as ritm_router
 from app.api.routes.sql import router as sql_router
 from app.core.config import get_settings
@@ -14,3 +15,4 @@ app.include_router(health_router)
 app.include_router(ritm_router)
 app.include_router(catalog_router)
 app.include_router(sql_router)
+app.include_router(report_router)
