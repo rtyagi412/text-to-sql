@@ -85,6 +85,7 @@ h1{font-family:var(--display); font-size:clamp(24px,3vw,34px); line-height:1.15;
 .arr::after{content:""; position:absolute; right:-2px; top:-5px; border:6px solid transparent; border-left:8px solid var(--arrow); border-right:0}
 .arr.both::before{content:""; position:absolute; left:-2px; top:-5px; border:6px solid transparent; border-right:8px solid var(--arrow); border-left:0}
 .arr.lab{flex-basis:78px}
+.arr.lab.wide{flex-basis:112px}
 .arr .lbl{position:absolute; bottom:8px; left:50%; transform:translateX(-50%); font-size:12px; font-weight:700; color:var(--arrow); white-space:nowrap}
 
 /* review gate (diamond) */
@@ -124,6 +125,7 @@ footer b{color:var(--ink); font-weight:600}
   .p3 .card h3{font-size:13.5px; gap:7px}
   .p3 .card h3 svg{width:22px; height:22px}
   .p3 .card .sub{font-size:12.5px}
+  .p3 .card ul{font-size:12px; padding-left:14px}
   .p3 .arr{flex-basis:18px; margin:0 3px}
   .p3 .arr.lab{flex-basis:70px}
   .p3 .gate{flex-basis:164px; height:150px; padding:0 34px}
@@ -177,13 +179,13 @@ footer b{color:var(--ink); font-weight:600}
     <div>
       <p class="eyebrow">End-to-end workflow</p>
       <h1>Secure Reporting Automation</h1>
-      <p class="lede">A business report request becomes a checked, read-only query and a scheduled report. Automation does the heavy lifting, and a person approves at three points before anything reaches business users.</p>
+      <p class="lede">From a RITM request to a report delivered through SSRS, with human review at every stage.</p>
     </div>
     <div class="legend" aria-label="Legend">
       <span><i class="lg-card"></i>Automated step</span>
       <span><i class="lg-gate"></i>Human review</span>
       <span><i class="lg-arrow"></i>Hand-off</span>
-      <span><i class="lg-loop"></i>Approved work reused</span>
+      <span><i class="lg-loop"></i>Reused for future requests</span>
     </div>
   </header>
 
@@ -193,131 +195,131 @@ footer b{color:var(--ink); font-weight:600}
       <section class="phase p1" aria-labelledby="h-p1">
         <div class="phase-head">
           <span class="num">1</span>
-          <div><h2 id="h-p1">Request Understanding</h2><p>Capture and confirm what the business is asking for</p></div>
+          <div><h2 id="h-p1">RITM Understanding</h2><p>Extract and confirm business requirements from the request</p></div>
         </div>
         <div class="flow">
           <article class="card">
-            <h3><svg><use href="#i-doc"/></svg>Report Request</h3>
-            <p class="sub">The business submits a request describing the report, the fields it needs and how it will be used.</p>
+            <h3><svg><use href="#i-doc"/></svg>RITM Request</h3>
+            <ul><li>number</li><li>output_fields</li><li>report_criteria</li><li>description</li><li>report_usage</li></ul>
           </article>
           <div class="arr"></div>
           <article class="card">
             <h3><svg><use href="#i-docsearch"/></svg>Requirement Extraction</h3>
-            <p class="sub">The request is read and turned into a clear list of fields and filters.</p>
+            <p class="sub">Understand business request from RITM</p>
           </article>
           <div class="arr"></div>
           <div class="gate">
             <svg><use href="#i-person"/></svg>
             <b>Human Review</b>
-            <small>Confirm fields &amp; filters</small>
+            <small>Confirm extracted fields &amp; filters</small>
           </div>
           <div class="arr lab"><span class="lbl">Confirmed</span></div>
           <article class="card">
-            <h3><svg><use href="#i-db"/></svg>Data Catalog</h3>
-            <p class="sub">A catalog describing the available data: tables, fields and how they relate.</p>
+            <h3><svg><use href="#i-db"/></svg>Schema Catalog</h3>
+            <ul><li>tables</li><li>columns</li><li>PK/FK</li><li>descriptions</li><li>data types</li><li>indexed columns</li></ul>
           </article>
-          <div class="arr both"></div>
+          <div class="arr both lab wide"><span class="lbl">schema metadata</span></div>
           <article class="card">
             <h3><svg><use href="#i-dblock"/></svg>Secure Database</h3>
-            <p class="sub">Enterprise data stays protected. It is only described, never changed.</p>
+            <ul><li>enterprise data</li><li>source systems</li></ul>
           </article>
         </div>
       </section>
 
       <div class="handoff p1" style="--hand-x:150px">
-        <span class="pill">Provides data knowledge for matching</span>
+        <span class="pill">Provides schema metadata for retrieval and mapping</span>
         <span class="down"></span>
       </div>
 
       <section class="phase p2" aria-labelledby="h-p2">
         <div class="phase-head">
           <span class="num">2</span>
-          <div><h2 id="h-p2">Data Discovery &amp; Mapping</h2><p>Find the right data and match it to the request</p></div>
+          <div><h2 id="h-p2">Schema Retrieval &amp; Mapping</h2><p>Find relevant schema using hybrid search and map to real database schema</p></div>
         </div>
         <div class="flow">
           <div class="sources">
             <article class="card">
               <h3><svg><use href="#i-search"/></svg>Keyword Search</h3>
-              <p class="sub">Finds data by matching names and business terms.</p>
+              <p class="sub">exact match on table/column/business terms</p>
             </article>
             <article class="card">
-              <h3><svg><use href="#i-graph"/></svg>Meaning-based Search</h3>
-              <p class="sub">Finds data that is related in meaning, even when the words differ.</p>
+              <h3><svg><use href="#i-graph"/></svg>Semantic Search</h3>
+              <p class="sub">embedding similarity for related meaning</p>
             </article>
             <article class="card" id="approved-src">
-              <h3><svg><use href="#i-list"/></svg>Past Approved Reports</h3>
-              <p class="sub">Learns from similar reports that were already delivered.</p>
+              <h3><svg><use href="#i-list"/></svg>Approved RITMs / Past Queries</h3>
+              <p class="sub">previously delivered SQL + metadata</p>
             </article>
           </div>
           <div class="arr"></div>
           <article class="card">
-            <h3><svg><use href="#i-db"/></svg>Relevant Data</h3>
-            <p class="sub">A focused shortlist of the data and examples that fit this request.</p>
+            <h3><svg><use href="#i-db"/></svg>Candidate Schema Context</h3>
+            <ul><li>relevant tables</li><li>columns</li><li>relationships</li><li>examples (past queries)</li></ul>
           </article>
           <div class="arr"></div>
           <article class="card">
             <h3><svg><use href="#i-grid"/></svg>Mapping</h3>
-            <p class="sub">Each requested field and filter is matched to real data, with suggestions from past reports.</p>
+            <ul><li>map output fields</li><li>map filters / time period</li><li>identify joins</li><li>apply business rules</li></ul>
           </article>
           <div class="arr"></div>
           <div class="gate">
             <svg><use href="#i-person"/></svg>
             <b>Human Review</b>
-            <small>Review mappings &amp; suggestions</small>
+            <small>Review mappings &amp; suggested filters</small>
           </div>
         </div>
       </section>
 
       <div class="handoff p2" style="--hand-x:79px">
-        <span class="pill">Approved mappings</span>
+        <span class="pill">Approved</span>
         <span class="down"></span>
       </div>
 
       <section class="phase p3" aria-labelledby="h-p3">
         <div class="phase-head">
           <span class="num">3</span>
-          <div><h2 id="h-p3">Query Generation &amp; Report Delivery</h2><p>Build, check and deliver the report</p></div>
+          <div><h2 id="h-p3">SQL Generation &amp; Report Automation</h2><p>Generate, validate and deliver the report with SSRS</p></div>
         </div>
         <div class="flow">
           <article class="card">
-            <h3><svg><use href="#i-sql"/></svg>Generate Query</h3>
-            <p class="sub">A read-only query is built from the approved mapping.</p>
+            <h3><svg><use href="#i-sql"/></svg>Generate SQL</h3>
+            <ul><li>SELECT-only SQL</li><li>apply filters/joins</li><li>use mapped schema</li></ul>
           </article>
           <div class="arr"></div>
           <article class="card">
-            <h3><svg><use href="#i-shield"/></svg>Safety Checks</h3>
-            <p class="sub">The query is checked for safety, accuracy and performance.</p>
+            <h3><svg><use href="#i-shield"/></svg>Validation &amp; Guardrails</h3>
+            <ul><li>syntax/compile check</li><li>schema validation</li><li>read-only enforcement</li><li>warnings / performance checks</li></ul>
           </article>
           <div class="arr"></div>
           <div class="gate">
             <svg><use href="#i-person"/></svg>
             <b>Human Review</b>
-            <small>Review final query</small>
+            <small>Review final SQL</small>
           </div>
           <div class="arr lab"><span class="lbl">Approved</span></div>
           <article class="card" id="store">
-            <h3><svg><use href="#i-db"/></svg>Save Approved Query</h3>
-            <p class="sub">Kept as a trusted example for future requests.</p>
+            <h3><svg><use href="#i-db"/></svg>Store Approved SQL</h3>
+            <ul><li>versioned approved_ritms</li><li>knowledge base</li></ul>
           </article>
           <div class="arr"></div>
           <article class="card">
-            <h3><svg><use href="#i-rdl"/></svg>Build Report</h3>
-            <p class="sub">The report layout is created automatically.</p>
+            <h3><svg><use href="#i-rdl"/></svg>Generate RDL</h3>
+            <p class="sub">Create SSRS report definition</p>
           </article>
           <div class="arr"></div>
           <article class="card">
-            <h3><svg><use href="#i-server"/></svg>Publish Report</h3>
-            <p class="sub">The report is published to the reporting server.</p>
+            <h3><svg><use href="#i-server"/></svg>Publish to SSRS</h3>
+            <p class="sub">Deploy report</p>
           </article>
           <div class="arr"></div>
           <article class="card">
-            <h3><svg><use href="#i-cal"/></svg>Schedule &amp; Email</h3>
-            <p class="sub">Delivery is set up on a regular schedule.</p>
+            <h3><svg><use href="#i-cal"/></svg>Create Schedule / Email Subscription</h3>
+            <p class="sub">Configure schedule / distribution</p>
           </article>
           <div class="arr"></div>
           <article class="card">
             <h3><svg><use href="#i-people"/></svg>Delivered Report</h3>
-            <p class="sub">Business users receive the report automatically.</p>
+            <p class="sub">to Business Users</p>
           </article>
         </div>
       </section>
