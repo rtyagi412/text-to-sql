@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Text-to-SQL Workflow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+:root{
+  --bg:#f3f6fb; --ink:#14203a; --ink-2:#4a5672; --card:#ffffff; --line:#d5dbe7;
+  --arrow:#2350b8;
+  --p1:#1d5fd0; --p1-bg:#e7f0fd; --p1-line:#b4cff5;
+  --p2:#157a4c; --p2-bg:#e8f5ee; --p2-line:#b3dcc5;
+  --p3:#6a3fc4; --p3-bg:#f1ebfb; --p3-line:#d2c3f1;
+  --gate:#a86f00; --gate-bg:#fff3d1; --gate-line:#e8b43a;
+  --chip-bg:rgba(20,32,58,.06);
+  --display:"Sora",ui-sans-serif,system-ui,sans-serif;
+  --body:"Figtree",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0d1320; --ink:#e7ecf6; --ink-2:#9ba7c0; --card:#141c2d; --line:#28324a;
+    --arrow:#7fa4ff;
+    --p1:#72a6ff; --p1-bg:#111f38; --p1-line:#25416f;
+    --p2:#5fd09b; --p2-bg:#0f241b; --p2-line:#1f4a36;
+    --p3:#b598ff; --p3-bg:#1b1533; --p3-line:#3b2d68;
+    --gate:#f3c350; --gate-bg:#2b230f; --gate-line:#8f6c1b;
+    --chip-bg:rgba(231,236,246,.08);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0d1320; --ink:#e7ecf6; --ink-2:#9ba7c0; --card:#141c2d; --line:#28324a;
+  --arrow:#7fa4ff;
+  --p1:#72a6ff; --p1-bg:#111f38; --p1-line:#25416f;
+  --p2:#5fd09b; --p2-bg:#0f241b; --p2-line:#1f4a36;
+  --p3:#b598ff; --p3-bg:#1b1533; --p3-line:#3b2d68;
+  --gate:#f3c350; --gate-bg:#2b230f; --gate-line:#8f6c1b;
+  --chip-bg:rgba(231,236,246,.08);
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg); color:var(--ink); font-family:var(--body); font-size:14px; line-height:1.45; padding-inline:16px; padding-block:28px 40px}
+.wrap{max-width:1500px; margin:0 auto; display:flex; flex-direction:column; gap:20px}
+
+/* header */
+header{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px 32px}
+.eyebrow{font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-2); margin:0 0 6px}
+h1{font-family:var(--display); font-size:clamp(24px,3vw,34px); line-height:1.15; margin:0; text-wrap:balance}
+.lede{margin:8px 0 0; max-width:70ch; color:var(--ink-2); font-size:15px}
+.legend{display:flex; flex-wrap:wrap; gap:10px 18px; font-size:12.5px; color:var(--ink-2)}
+.legend span{display:inline-flex; align-items:center; gap:8px}
+.lg-card{width:18px; height:13px; border:1.5px solid var(--line); border-radius:4px; background:var(--card)}
+.lg-gate{width:14px; height:14px; transform:rotate(45deg); background:var(--gate-bg); border:1.5px solid var(--gate-line)}
+.lg-loop{width:26px; border-top:2px dashed var(--p3)}
+.lg-arrow{width:24px; height:2px; background:var(--arrow); position:relative}
+.lg-arrow::after{content:""; position:absolute; right:-1px; top:-4px; border:5px solid transparent; border-left:7px solid var(--arrow); border-right:0}
+
+/* poster */
+.scroller{overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px}
+.poster{position:relative; display:flex; flex-direction:column}
+.phase{border-radius:18px; border:1.5px solid var(--pl); background:var(--pb); padding:18px 22px 22px; display:flex; flex-direction:column; gap:16px}
+.p1{--pc:var(--p1); --pb:var(--p1-bg); --pl:var(--p1-line)}
+.p2{--pc:var(--p2); --pb:var(--p2-bg); --pl:var(--p2-line)}
+.p3{--pc:var(--p3); --pb:var(--p3-bg); --pl:var(--p3-line)}
+.phase-head{display:flex; align-items:center; gap:14px}
+.num{flex:0 0 auto; width:44px; height:44px; border-radius:50%; background:var(--pc); color:var(--bg); display:grid; place-items:center; font-family:var(--display); font-weight:700; font-size:21px}
+.phase-head h2{font-family:var(--display); font-size:21px; line-height:1.2; margin:0; color:var(--pc)}
+.phase-head p{margin:2px 0 0; color:var(--ink-2); font-size:14px}
+
+.flow{display:flex; align-items:center}
+.card{flex:1 1 0; min-width:0; align-self:stretch; background:var(--card); border:1.5px solid var(--pl); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:6px}
+.card h3{margin:0; font-size:14.5px; line-height:1.25; font-weight:700; display:flex; align-items:center; gap:9px}
+.card h3 svg{flex:0 0 auto; width:26px; height:26px; color:var(--pc)}
+.card ul{margin:0; padding-left:16px; color:var(--ink-2); font-size:12.5px; line-height:1.4}
+.card li{margin:1px 0}
+.card li::marker{color:var(--pc)}
+.card .sub{margin:0; color:var(--ink-2); font-size:12.5px}
+.chip{margin-top:auto; align-self:flex-start; max-width:100%; overflow:hidden; text-overflow:ellipsis; font-family:var(--mono); font-size:11px; font-weight:500; color:var(--pc); background:var(--chip-bg); border-radius:6px; padding:3px 7px; white-space:nowrap}
+.tag-loop{align-self:flex-start; font-size:11.5px; color:var(--p3); border:1.5px dashed var(--p3); border-radius:6px; padding:2px 7px}
+
+/* arrows */
+.arr{flex:0 0 26px; height:2px; background:var(--arrow); position:relative; align-self:center; margin:0 4px}
+.arr::after{content:""; position:absolute; right:-2px; top:-5px; border:6px solid transparent; border-left:8px solid var(--arrow); border-right:0}
+.arr.both::before{content:""; position:absolute; left:-2px; top:-5px; border:6px solid transparent; border-right:8px solid var(--arrow); border-left:0}
+.arr.lab{flex-basis:78px}
+.arr .lbl{position:absolute; bottom:8px; left:50%; transform:translateX(-50%); font-size:12px; font-weight:700; color:var(--arrow); white-space:nowrap}
+
+/* review gate (diamond) */
+.gate{flex:0 0 178px; height:158px; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:0 40px}
+.gate::before,.gate::after{content:""; position:absolute; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.gate::before{inset:0; background:var(--gate-line)}
+.gate::after{inset:3px 3.5px; background:var(--gate-bg)}
+.gate > *{position:relative; z-index:1}
+.gate svg{width:24px; height:24px; color:var(--gate)}
+.gate b{font-size:13px; line-height:1.15; margin-top:2px}
+.gate small{font-size:11px; color:var(--ink-2); line-height:1.25}
+
+/* phase 2 sources that merge into one arrow */
+.sources{flex:0 0 300px; display:grid; grid-auto-rows:1fr; gap:10px; position:relative; padding-right:20px; align-self:stretch}
+.sources .card{flex:none}
+.sources .card::after{content:""; position:absolute; right:-21.5px; top:50%; width:20px; height:2px; background:var(--arrow)}
+.sources .card{position:relative}
+.sources::after{content:""; position:absolute; right:0; width:2px; background:var(--arrow); top:calc(100% / 6 - 2px); bottom:calc(100% / 6 - 2px)}
+
+/* hand-offs between phases */
+.handoff{display:flex; justify-content:flex-end; align-items:center; gap:10px; height:46px; padding-right:var(--hand-x,120px)}
+.handoff .pill{font-size:12.5px; font-weight:600; color:var(--pc); background:var(--card); border:1.5px solid var(--pl); border-radius:999px; padding:4px 11px; white-space:nowrap}
+.handoff .pill code{font-family:var(--mono); font-size:11px; font-weight:500}
+.handoff .down{width:2px; align-self:stretch; background:var(--arrow); position:relative}
+.handoff .down::after{content:""; position:absolute; bottom:-2px; left:-5px; border:6px solid transparent; border-top:8px solid var(--arrow); border-bottom:0}
+
+.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible}
+.overlay text{font-family:var(--body); font-size:12.5px; font-weight:700; fill:var(--p3)}
+
+footer{display:flex; flex-wrap:wrap; gap:8px 24px; color:var(--ink-2); font-size:12.5px; border-top:1px solid var(--line); padding-top:14px}
+footer b{color:var(--ink); font-weight:600}
+
+/* wide screens: one horizontal poster, scrolls sideways inside its own box if the window is narrower */
+@media (min-width:900px){
+  .poster{min-width:1420px}
+  .p3 .card{padding:11px 11px}
+  .p3 .card h3{font-size:13.5px; gap:7px}
+  .p3 .card h3 svg{width:22px; height:22px}
+  .p3 .card ul{font-size:12px; padding-left:14px}
+  .p3 .arr{flex-basis:18px; margin:0 3px}
+  .p3 .arr.lab{flex-basis:70px}
+  .p3 .gate{flex-basis:164px; height:150px; padding:0 34px}
+  .sources{flex-basis:320px}
+}
+/* phones and small tablets: every flow stacks top to bottom */
+@media (max-width:899px){
+  .flow{flex-direction:column; align-items:stretch}
+  .arr{flex:0 0 22px; width:2px; height:auto; margin:4px 0}
+  .arr::after{right:auto; top:auto; bottom:-2px; left:-5px; border:6px solid transparent; border-top:8px solid var(--arrow); border-bottom:0}
+  .arr.both::before{left:-5px; top:-2px; border:6px solid transparent; border-bottom:8px solid var(--arrow); border-top:0}
+  .arr.lab{flex-basis:30px}
+  .arr .lbl{bottom:auto; top:50%; left:12px; transform:translateY(-50%)}
+  .gate{align-self:center}
+  .sources{flex:none; padding-right:0}
+  .sources .card::after,.sources::after{display:none}
+  .handoff{justify-content:center; padding-right:0; height:auto; padding-block:8px; flex-direction:column; gap:6px}
+  .handoff .down{height:18px; align-self:center}
+  .overlay{display:none}
+}
+@media (prefers-reduced-motion:no-preference){
+  .overlay path.loop{animation:dash 1.6s linear infinite}
+  @keyframes dash{to{stroke-dashoffset:-20}}
+}
+</style>
+</head><body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6M9 9h2"/></symbol>
+    <symbol id="i-docsearch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l4 4v4"/><path d="M8 8h5M8 12h3"/><circle cx="16" cy="16" r="3.2"/><path d="m18.4 18.4 2.6 2.6"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.8-4 3.8-6 7.5-6s6.7 2 7.5 6"/></symbol>
+    <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8"/></symbol>
+    <symbol id="i-dblock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><ellipse cx="10.5" cy="5.5" rx="7" ry="2.6"/><path d="M3.5 5.5v12c0 1.4 3.1 2.6 7 2.6M17.5 5.5V11M3.5 11.5c0 1.4 3.1 2.6 7 2.6"/><rect x="14" y="15" width="7.5" height="6" rx="1.2"/><path d="M15.7 15v-1.6a2 2 0 0 1 4 0V15"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
+    <symbol id="i-graph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5.5" r="2.6"/><circle cx="5.5" cy="18" r="2.6"/><circle cx="18.5" cy="18" r="2.6"/><path d="m10.7 7.8-3.9 7.8M13.3 7.8l3.9 7.8M8.1 18h7.8"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4.5" y="3" width="15" height="18" rx="2"/><path d="M8 3v2h8V3M8 10h8M8 14h8M8 18h5"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-sql" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><rect x="7.5" y="11.5" width="9" height="5" rx="1" fill="currentColor" stroke="none" opacity=".22"/><path d="M9 14h6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.1 8.2 7.5 9.5 4.4-1.3 7.5-4.9 7.5-9.5V6z"/><path d="m8.7 12.2 2.3 2.3 4.4-4.6"/></symbol>
+    <symbol id="i-rdl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8.5 17v-3M12 17v-5M15.5 17v-2"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="3.5" width="17" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="17" height="7" rx="1.8"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="7.5" r="3.2"/><circle cx="5.5" cy="9.5" r="2.4"/><circle cx="18.5" cy="9.5" r="2.4"/><path d="M6.5 20c.4-3.4 2.6-5.5 5.5-5.5s5.1 2.1 5.5 5.5M1.8 18.5c.3-2.4 1.8-3.8 3.7-3.8M22.2 18.5c-.3-2.4-1.8-3.8-3.7-3.8"/></symbol>
+    <marker id="loop-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--p3)"/></marker>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header>
+    <div>
+      <p class="eyebrow">Workflow · rtyagi412/text-to-sql</p>
+      <h1>Text-to-SQL Report Automation</h1>
+      <p class="lede">A RITM report request becomes a validated, read-only T-SQL query and a scheduled SSRS report. The LLM does the reading and writing; a person approves at three gates before anything reaches business users.</p>
+    </div>
+    <div class="legend" aria-label="Legend">
+      <span><i class="lg-card"></i>Automated step</span>
+      <span><i class="lg-gate"></i>Human review gate</span>
+      <span><i class="lg-arrow"></i>Hand-off</span>
+      <span><i class="lg-loop"></i>Approved SQL reused</span>
+    </div>
+  </header>
+
+  <div class="scroller">
+    <div class="poster" id="poster">
+
+      <!-- PHASE 1 -->
+      <section class="phase p1" aria-labelledby="h-p1">
+        <div class="phase-head">
+          <span class="num">1</span>
+          <div><h2 id="h-p1">RITM Understanding</h2><p>Extract and confirm the business requirements from the request</p></div>
+        </div>
+        <div class="flow">
+          <article class="card">
+            <h3><svg><use href="#i-doc"/></svg>RITM Request</h3>
+            <ul><li>number</li><li>output_fields</li><li>report_criteria</li><li>description</li><li>report_usage</li></ul>
+            <code class="chip">GET /ritm/{number}</code>
+          </article>
+          <div class="arr"></div>
+          <article class="card">
+            <h3><svg><use href="#i-docsearch"/></svg>Requirement Extraction</h3>
+            <ul><li>LLM reads the ticket only, no schema</li><li>Fields + filters in business words</li><li>Exact ticket evidence per item</li><li>Emails and long numbers masked</li></ul>
+            <code class="chip">POST /sql/extract</code>
+          </article>
+          <div class="arr"></div>
+          <div class="gate">
+            <svg><use href="#i-person"/></svg>
+            <b>Human Review</b>
+            <small>Confirm fields &amp; filters</small>
+          </div>
+          <div class="arr lab"><span class="lbl">Confirmed</span></div>
+          <article class="card">
+            <h3><svg><use href="#i-db"/></svg>Schema Catalog</h3>
+            <ul><li>tables, columns, data types</li><li>PK / FK, incl. composite keys</li><li>descriptions</li><li>CHECK-constraint values</li><li>keyword index + vector per table</li></ul>
+            <code class="chip">POST /catalog/sync</code>
+          </article>
+          <div class="arr both lab"><span class="lbl">metadata</span></div>
+          <article class="card">
+            <h3><svg><use href="#i-dblock"/></svg>Secure Database</h3>
+            <ul><li>Enterprise SQL Server</li><li>Introspected for metadata only</li><li>Queries compiled, never executed</li></ul>
+            <code class="chip">Postgres + pgvector catalog</code>
+          </article>
+        </div>
+      </section>
+
+      <div class="handoff p1" style="--hand-x:150px">
+        <span class="pill">Provides schema metadata for retrieval &amp; mapping</span>
+        <span class="down"></span>
+      </div>
+
+      <!-- PHASE 2 -->
+      <section class="phase p2" aria-labelledby="h-p2">
+        <div class="phase-head">
+          <span class="num">2</span>
+          <div><h2 id="h-p2">Schema Retrieval &amp; Mapping</h2><p>Find the relevant schema with hybrid search and map the request to real columns</p></div>
+        </div>
+        <div class="flow">
+          <div class="sources">
+            <article class="card">
+              <h3><svg><use href="#i-search"/></svg>Keyword Search</h3>
+              <p class="sub">Postgres full-text rank on table and column names and descriptions · weight 0.5</p>
+            </article>
+            <article class="card">
+              <h3><svg><use href="#i-graph"/></svg>Semantic Search</h3>
+              <p class="sub">Voyage embeddings, pgvector cosine similarity for related meaning · weight 0.5</p>
+            </article>
+            <article class="card" id="approved-src">
+              <h3><svg><use href="#i-list"/></svg>Approved RITMs / Past Queries</h3>
+              <p class="sub">Top 4 similar approved SQL + metadata, similarity ≥ 0.5</p>
+            </article>
+          </div>
+          <div class="arr"></div>
+          <article class="card">
+            <h3><svg><use href="#i-db"/></svg>Candidate Schema Context</h3>
+            <ul><li>up to 20 relevant tables</li><li>columns and types</li><li>FK relationships, 5 neighbour slots</li><li>examples (past approved SQL)</li><li>index of every table</li></ul>
+          </article>
+          <div class="arr"></div>
+          <article class="card">
+            <h3><svg><use href="#i-grid"/></svg>Mapping</h3>
+            <ul><li>map output fields to columns</li><li>map filters / time periods to stored values</li><li>derived fields (counts, totals)</li><li>suggested filters, cited to past RITMs</li><li>4 validators, 1 correction retry</li></ul>
+            <code class="chip">POST /sql/map</code>
+          </article>
+          <div class="arr"></div>
+          <div class="gate">
+            <svg><use href="#i-person"/></svg>
+            <b>Human Review</b>
+            <small>Mappings &amp; suggested filters</small>
+          </div>
+        </div>
+      </section>
+
+      <div class="handoff p2" style="--hand-x:79px">
+        <span class="pill">Approved mappings → <code>POST /sql/write</code></span>
+        <span class="down"></span>
+      </div>
+
+      <!-- PHASE 3 -->
+      <section class="phase p3" aria-labelledby="h-p3">
+        <div class="phase-head">
+          <span class="num">3</span>
+          <div><h2 id="h-p3">SQL Generation &amp; Report Automation</h2><p>Generate, validate and deliver the report with SSRS</p></div>
+        </div>
+        <div class="flow">
+          <article class="card">
+            <h3><svg><use href="#i-sql"/></svg>Generate SQL</h3>
+            <ul><li>one T-SQL SELECT</li><li>FK join plan applied</li><li>uses mapped schema only</li></ul>
+            <code class="chip">/sql/write</code>
+          </article>
+          <div class="arr"></div>
+          <article class="card">
+            <h3><svg><use href="#i-shield"/></svg>Validation &amp; Guardrails</h3>
+            <ul><li>sqlglot + schema check</li><li>SELECT-only, no INTO / CTE / *</li><li>compiled, never run</li><li>performance warnings</li></ul>
+          </article>
+          <div class="arr"></div>
+          <div class="gate">
+            <svg><use href="#i-person"/></svg>
+            <b>Human Review</b>
+            <small>Review final SQL</small>
+          </div>
+          <div class="arr lab"><span class="lbl">Approved</span></div>
+          <article class="card" id="store">
+            <h3><svg><use href="#i-db"/></svg>Store Approved SQL</h3>
+            <ul><li>approved_ritms table</li><li>versioned, approved_by, note</li></ul>
+            <span class="tag-loop">↺ Reused in phase 2</span>
+            <code class="chip">/sql/approve</code>
+          </article>
+          <div class="arr"></div>
+          <article class="card">
+            <h3><svg><use href="#i-rdl"/></svg>Generate RDL</h3>
+            <ul><li>SSRS report definition</li><li>headers, formats, layout</li></ul>
+            <code class="chip">/report/rdl</code>
+          </article>
+          <div class="arr"></div>
+          <article class="card">
+            <h3><svg><use href="#i-server"/></svg>Publish to SSRS</h3>
+            <ul><li>REST API v2.0</li><li>bound to shared data source</li></ul>
+            <code class="chip">/report/publish</code>
+          </article>
+          <div class="arr"></div>
+          <article class="card">
+            <h3><svg><use href="#i-cal"/></svg>Schedule / Email</h3>
+            <ul><li>daily, weekly, monthly</li><li>MHTML, PDF, Excel, CSV</li></ul>
+            <code class="chip">/report/subscription</code>
+          </article>
+          <div class="arr"></div>
+          <article class="card">
+            <h3><svg><use href="#i-people"/></svg>Delivered Report</h3>
+            <ul><li>to business users</li><li>SSRS runs it on schedule</li></ul>
+            <code class="chip">/report/schedule</code>
+          </article>
+        </div>
+      </section>
+
+      <svg class="overlay" id="overlay" aria-hidden="true"></svg>
+    </div>
+  </div>
+
+  <footer>
+    <span><b>Stack</b> FastAPI · Python 3.12 · DeepSeek (JSON mode) · Voyage AI embeddings · Postgres 16 + pgvector · SQL Server · SSRS</span>
+    <span><b>Every LLM call audited</b> prompt version, model, tokens, attempts</span>
+    <span><b>One call to ship</b> <code style="font-family:var(--mono);font-size:11.5px">POST /report/schedule</code> = publish + subscribe</span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var poster = document.getElementById('poster');
+  var svg = document.getElementById('overlay');
+  var from = document.getElementById('store');
+  var to = document.getElementById('approved-src');
+  var p2 = document.querySelector('.phase.p2');
+  var p3 = document.querySelector('.phase.p3');
+  var NS = 'http://www.w3.org/2000/svg';
+
+  function draw(){
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    if (window.matchMedia('(max-width: 899px)').matches) return;
+    var base = poster.getBoundingClientRect();
+    var a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
+    var g2 = p2.getBoundingClientRect(), g3 = p3.getBoundingClientRect();
+    var x1 = a.left + a.width / 2 - base.left, y1 = a.top - base.top;
+    var x2 = b.left + b.width / 2 - base.left, y2 = b.bottom - base.top;
+    var ym = (g2.bottom + g3.top) / 2 - base.top;
+    var path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', 'M' + x1 + ' ' + y1 + 'V' + ym + 'H' + x2 + 'V' + (y2 + 2));
+    path.setAttribute('class', 'loop');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'var(--p3)');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('stroke-dasharray', '6 4');
+    path.setAttribute('marker-end', 'url(#loop-head)');
+    svg.appendChild(path);
+    var label = document.createElementNS(NS, 'text');
+    label.setAttribute('x', (x1 + x2) / 2);
+    label.setAttribute('y', ym - 7);
+    label.setAttribute('text-anchor', 'middle');
+    label.textContent = 'Reused for future requests';
+    svg.appendChild(label);
+  }
+  window.addEventListener('resize', draw);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+  if ('ResizeObserver' in window) new ResizeObserver(draw).observe(poster);
+  draw();
+})();
+</script>
+</body></html>
