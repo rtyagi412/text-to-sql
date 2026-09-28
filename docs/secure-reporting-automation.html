@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Text-to-SQL Workflow</title>
+<title>Secure Reporting Automation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
@@ -76,7 +76,7 @@ h1{font-family:var(--display); font-size:clamp(24px,3vw,34px); line-height:1.15;
 .card ul{margin:0; padding-left:16px; color:var(--ink-2); font-size:12.5px; line-height:1.4}
 .card li{margin:1px 0}
 .card li::marker{color:var(--pc)}
-.card .sub{margin:0; color:var(--ink-2); font-size:12.5px}
+.card .sub{margin:0; color:var(--ink-2); font-size:13px; line-height:1.45}
 .chip{margin-top:auto; align-self:flex-start; max-width:100%; overflow:hidden; text-overflow:ellipsis; font-family:var(--mono); font-size:11px; font-weight:500; color:var(--pc); background:var(--chip-bg); border-radius:6px; padding:3px 7px; white-space:nowrap}
 .tag-loop{align-self:flex-start; font-size:11.5px; color:var(--p3); border:1.5px dashed var(--p3); border-radius:6px; padding:2px 7px}
 
@@ -123,7 +123,7 @@ footer b{color:var(--ink); font-weight:600}
   .p3 .card{padding:11px 11px}
   .p3 .card h3{font-size:13.5px; gap:7px}
   .p3 .card h3 svg{width:22px; height:22px}
-  .p3 .card ul{font-size:12px; padding-left:14px}
+  .p3 .card .sub{font-size:12.5px}
   .p3 .arr{flex-basis:18px; margin:0 3px}
   .p3 .arr.lab{flex-basis:70px}
   .p3 .gate{flex-basis:164px; height:150px; padding:0 34px}
@@ -175,38 +175,35 @@ footer b{color:var(--ink); font-weight:600}
 <div class="wrap">
   <header>
     <div>
-      <p class="eyebrow">Workflow · rtyagi412/text-to-sql</p>
-      <h1>Text-to-SQL Report Automation</h1>
-      <p class="lede">A RITM report request becomes a validated, read-only T-SQL query and a scheduled SSRS report. The LLM does the reading and writing; a person approves at three gates before anything reaches business users.</p>
+      <p class="eyebrow">End-to-end workflow</p>
+      <h1>Secure Reporting Automation</h1>
+      <p class="lede">A business report request becomes a checked, read-only query and a scheduled report. Automation does the heavy lifting, and a person approves at three points before anything reaches business users.</p>
     </div>
     <div class="legend" aria-label="Legend">
       <span><i class="lg-card"></i>Automated step</span>
-      <span><i class="lg-gate"></i>Human review gate</span>
+      <span><i class="lg-gate"></i>Human review</span>
       <span><i class="lg-arrow"></i>Hand-off</span>
-      <span><i class="lg-loop"></i>Approved SQL reused</span>
+      <span><i class="lg-loop"></i>Approved work reused</span>
     </div>
   </header>
 
   <div class="scroller">
     <div class="poster" id="poster">
 
-      <!-- PHASE 1 -->
       <section class="phase p1" aria-labelledby="h-p1">
         <div class="phase-head">
           <span class="num">1</span>
-          <div><h2 id="h-p1">RITM Understanding</h2><p>Extract and confirm the business requirements from the request</p></div>
+          <div><h2 id="h-p1">Request Understanding</h2><p>Capture and confirm what the business is asking for</p></div>
         </div>
         <div class="flow">
           <article class="card">
-            <h3><svg><use href="#i-doc"/></svg>RITM Request</h3>
-            <ul><li>number</li><li>output_fields</li><li>report_criteria</li><li>description</li><li>report_usage</li></ul>
-            <code class="chip">GET /ritm/{number}</code>
+            <h3><svg><use href="#i-doc"/></svg>Report Request</h3>
+            <p class="sub">The business submits a request describing the report, the fields it needs and how it will be used.</p>
           </article>
           <div class="arr"></div>
           <article class="card">
             <h3><svg><use href="#i-docsearch"/></svg>Requirement Extraction</h3>
-            <ul><li>LLM reads the ticket only, no schema</li><li>Fields + filters in business words</li><li>Exact ticket evidence per item</li><li>Emails and long numbers masked</li></ul>
-            <code class="chip">POST /sql/extract</code>
+            <p class="sub">The request is read and turned into a clear list of fields and filters.</p>
           </article>
           <div class="arr"></div>
           <div class="gate">
@@ -216,123 +213,111 @@ footer b{color:var(--ink); font-weight:600}
           </div>
           <div class="arr lab"><span class="lbl">Confirmed</span></div>
           <article class="card">
-            <h3><svg><use href="#i-db"/></svg>Schema Catalog</h3>
-            <ul><li>tables, columns, data types</li><li>PK / FK, incl. composite keys</li><li>descriptions</li><li>CHECK-constraint values</li><li>keyword index + vector per table</li></ul>
-            <code class="chip">POST /catalog/sync</code>
+            <h3><svg><use href="#i-db"/></svg>Data Catalog</h3>
+            <p class="sub">A catalog describing the available data: tables, fields and how they relate.</p>
           </article>
-          <div class="arr both lab"><span class="lbl">metadata</span></div>
+          <div class="arr both"></div>
           <article class="card">
             <h3><svg><use href="#i-dblock"/></svg>Secure Database</h3>
-            <ul><li>Enterprise SQL Server</li><li>Introspected for metadata only</li><li>Queries compiled, never executed</li></ul>
-            <code class="chip">Postgres + pgvector catalog</code>
+            <p class="sub">Enterprise data stays protected. It is only described, never changed.</p>
           </article>
         </div>
       </section>
 
       <div class="handoff p1" style="--hand-x:150px">
-        <span class="pill">Provides schema metadata for retrieval &amp; mapping</span>
+        <span class="pill">Provides data knowledge for matching</span>
         <span class="down"></span>
       </div>
 
-      <!-- PHASE 2 -->
       <section class="phase p2" aria-labelledby="h-p2">
         <div class="phase-head">
           <span class="num">2</span>
-          <div><h2 id="h-p2">Schema Retrieval &amp; Mapping</h2><p>Find the relevant schema with hybrid search and map the request to real columns</p></div>
+          <div><h2 id="h-p2">Data Discovery &amp; Mapping</h2><p>Find the right data and match it to the request</p></div>
         </div>
         <div class="flow">
           <div class="sources">
             <article class="card">
               <h3><svg><use href="#i-search"/></svg>Keyword Search</h3>
-              <p class="sub">Postgres full-text rank on table and column names and descriptions · weight 0.5</p>
+              <p class="sub">Finds data by matching names and business terms.</p>
             </article>
             <article class="card">
-              <h3><svg><use href="#i-graph"/></svg>Semantic Search</h3>
-              <p class="sub">Voyage embeddings, pgvector cosine similarity for related meaning · weight 0.5</p>
+              <h3><svg><use href="#i-graph"/></svg>Meaning-based Search</h3>
+              <p class="sub">Finds data that is related in meaning, even when the words differ.</p>
             </article>
             <article class="card" id="approved-src">
-              <h3><svg><use href="#i-list"/></svg>Approved RITMs / Past Queries</h3>
-              <p class="sub">Top 4 similar approved SQL + metadata, similarity ≥ 0.5</p>
+              <h3><svg><use href="#i-list"/></svg>Past Approved Reports</h3>
+              <p class="sub">Learns from similar reports that were already delivered.</p>
             </article>
           </div>
           <div class="arr"></div>
           <article class="card">
-            <h3><svg><use href="#i-db"/></svg>Candidate Schema Context</h3>
-            <ul><li>up to 20 relevant tables</li><li>columns and types</li><li>FK relationships, 5 neighbour slots</li><li>examples (past approved SQL)</li><li>index of every table</li></ul>
+            <h3><svg><use href="#i-db"/></svg>Relevant Data</h3>
+            <p class="sub">A focused shortlist of the data and examples that fit this request.</p>
           </article>
           <div class="arr"></div>
           <article class="card">
             <h3><svg><use href="#i-grid"/></svg>Mapping</h3>
-            <ul><li>map output fields to columns</li><li>map filters / time periods to stored values</li><li>derived fields (counts, totals)</li><li>suggested filters, cited to past RITMs</li><li>4 validators, 1 correction retry</li></ul>
-            <code class="chip">POST /sql/map</code>
+            <p class="sub">Each requested field and filter is matched to real data, with suggestions from past reports.</p>
           </article>
           <div class="arr"></div>
           <div class="gate">
             <svg><use href="#i-person"/></svg>
             <b>Human Review</b>
-            <small>Mappings &amp; suggested filters</small>
+            <small>Review mappings &amp; suggestions</small>
           </div>
         </div>
       </section>
 
       <div class="handoff p2" style="--hand-x:79px">
-        <span class="pill">Approved mappings → <code>POST /sql/write</code></span>
+        <span class="pill">Approved mappings</span>
         <span class="down"></span>
       </div>
 
-      <!-- PHASE 3 -->
       <section class="phase p3" aria-labelledby="h-p3">
         <div class="phase-head">
           <span class="num">3</span>
-          <div><h2 id="h-p3">SQL Generation &amp; Report Automation</h2><p>Generate, validate and deliver the report with SSRS</p></div>
+          <div><h2 id="h-p3">Query Generation &amp; Report Delivery</h2><p>Build, check and deliver the report</p></div>
         </div>
         <div class="flow">
           <article class="card">
-            <h3><svg><use href="#i-sql"/></svg>Generate SQL</h3>
-            <ul><li>one T-SQL SELECT</li><li>FK join plan applied</li><li>uses mapped schema only</li></ul>
-            <code class="chip">/sql/write</code>
+            <h3><svg><use href="#i-sql"/></svg>Generate Query</h3>
+            <p class="sub">A read-only query is built from the approved mapping.</p>
           </article>
           <div class="arr"></div>
           <article class="card">
-            <h3><svg><use href="#i-shield"/></svg>Validation &amp; Guardrails</h3>
-            <ul><li>sqlglot + schema check</li><li>SELECT-only, no INTO / CTE / *</li><li>compiled, never run</li><li>performance warnings</li></ul>
+            <h3><svg><use href="#i-shield"/></svg>Safety Checks</h3>
+            <p class="sub">The query is checked for safety, accuracy and performance.</p>
           </article>
           <div class="arr"></div>
           <div class="gate">
             <svg><use href="#i-person"/></svg>
             <b>Human Review</b>
-            <small>Review final SQL</small>
+            <small>Review final query</small>
           </div>
           <div class="arr lab"><span class="lbl">Approved</span></div>
           <article class="card" id="store">
-            <h3><svg><use href="#i-db"/></svg>Store Approved SQL</h3>
-            <ul><li>approved_ritms table</li><li>versioned, approved_by, note</li></ul>
-            <span class="tag-loop">↺ Reused in phase 2</span>
-            <code class="chip">/sql/approve</code>
+            <h3><svg><use href="#i-db"/></svg>Save Approved Query</h3>
+            <p class="sub">Kept as a trusted example for future requests.</p>
           </article>
           <div class="arr"></div>
           <article class="card">
-            <h3><svg><use href="#i-rdl"/></svg>Generate RDL</h3>
-            <ul><li>SSRS report definition</li><li>headers, formats, layout</li></ul>
-            <code class="chip">/report/rdl</code>
+            <h3><svg><use href="#i-rdl"/></svg>Build Report</h3>
+            <p class="sub">The report layout is created automatically.</p>
           </article>
           <div class="arr"></div>
           <article class="card">
-            <h3><svg><use href="#i-server"/></svg>Publish to SSRS</h3>
-            <ul><li>REST API v2.0</li><li>bound to shared data source</li></ul>
-            <code class="chip">/report/publish</code>
+            <h3><svg><use href="#i-server"/></svg>Publish Report</h3>
+            <p class="sub">The report is published to the reporting server.</p>
           </article>
           <div class="arr"></div>
           <article class="card">
-            <h3><svg><use href="#i-cal"/></svg>Schedule / Email</h3>
-            <ul><li>daily, weekly, monthly</li><li>MHTML, PDF, Excel, CSV</li></ul>
-            <code class="chip">/report/subscription</code>
+            <h3><svg><use href="#i-cal"/></svg>Schedule &amp; Email</h3>
+            <p class="sub">Delivery is set up on a regular schedule.</p>
           </article>
           <div class="arr"></div>
           <article class="card">
             <h3><svg><use href="#i-people"/></svg>Delivered Report</h3>
-            <ul><li>to business users</li><li>SSRS runs it on schedule</li></ul>
-            <code class="chip">/report/schedule</code>
+            <p class="sub">Business users receive the report automatically.</p>
           </article>
         </div>
       </section>
@@ -340,12 +325,6 @@ footer b{color:var(--ink); font-weight:600}
       <svg class="overlay" id="overlay" aria-hidden="true"></svg>
     </div>
   </div>
-
-  <footer>
-    <span><b>Stack</b> FastAPI · Python 3.12 · DeepSeek (JSON mode) · Voyage AI embeddings · Postgres 16 + pgvector · SQL Server · SSRS</span>
-    <span><b>Every LLM call audited</b> prompt version, model, tokens, attempts</span>
-    <span><b>One call to ship</b> <code style="font-family:var(--mono);font-size:11.5px">POST /report/schedule</code> = publish + subscribe</span>
-  </footer>
 </div>
 
 <script>
